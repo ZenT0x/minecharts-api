@@ -12,8 +12,9 @@ spec:
       labels:
         app: minecharts
     spec:
+      serviceAccountName: minecharts-sa
       containers:
       - name: minecharts
-        image: minecharts:latest
+        image: ghcr.io/zent0x/minecharts:latest
         ports:
         - containerPort: 8080
