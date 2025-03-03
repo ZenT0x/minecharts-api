@@ -1,6 +1,6 @@
 [build]
-  cmd = "go build -o minecharts ."
-  bin = "minecharts"
+  cmd = "go build -o build/minecharts ./cmd"
+  bin = "build/minecharts"
   include_ext = ["go", "tpl", "tmpl", "html"]
   exclude_dir = ["assets", "tmp", "vendor",".git","kubernetes"]
 
