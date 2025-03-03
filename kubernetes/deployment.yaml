@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minecharts-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minecharts
+  template:
+    metadata:
+      labels:
+        app: minecharts
+    spec:
+      containers:
+      - name: minecharts
+        image: minecharts:latest
+        ports:
+        - containerPort: 8080
