@@ -2,7 +2,7 @@
   cmd = "go build -o minecharts ."
   bin = "minecharts"
   include_ext = ["go", "tpl", "tmpl", "html"]
-  exclude_dir = ["assets", "tmp", "vendor"]
+  exclude_dir = ["assets", "tmp", "vendor",".git","kubernetes"]
 
 [log]
   time = true
