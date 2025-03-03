@@ -1,7 +1,8 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: minecharts-service
+  name: minecharts
+  namespace: minecharts
 spec:
   type: NodePort
   selector:
