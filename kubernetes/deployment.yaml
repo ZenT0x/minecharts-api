@@ -1,7 +1,8 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: minecharts-deployment
+  name: minecharts
+  namespace: minecharts
 spec:
   replicas: 1
   selector:
@@ -12,7 +13,7 @@ spec:
       labels:
         app: minecharts
     spec:
-      serviceAccountName: minecharts-sa
+      serviceAccountName: minecharts
       containers:
       - name: minecharts
         image: ghcr.io/zent0x/minecharts:latest
