@@ -7,7 +7,7 @@
 *.dll
 *.so
 *.dylib
-./build
+/build
 
 # Temporary files
 /tmp
