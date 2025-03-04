@@ -32,12 +32,17 @@ func CreateMinecraftPodHandler(c *gin.Context) {
 		return
 	}
 
+	// Prefix the pod name with "minecraft-server-"
 	podName := "minecraft-server-" + req.PodName
 
-	// Define the pod with the itzg/minecraft-server image and accept the EULA.
+	// Define the pod with the itzg/minecraft-server image, accept the EULA,
+	// and add a label to identify pods created by the API.
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: podName,
+			Labels: map[string]string{
+				"created-by": "minecharts-api",
+			},
 		},
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{
@@ -69,18 +74,28 @@ func CreateMinecraftPodHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, newPod)
 }
 
-// DeleteMinecraftPodHandler deletes a Minecraft pod in the "minecharts" namespace.
-// It expects the pod name to be provided as a URL parameter.
+// DeleteMinecraftPodHandler deletes a Minecraft pod only if it has the proper label.
 func DeleteMinecraftPodHandler(c *gin.Context) {
+	podName := c.Param("podName")
 
-	podName := "minecraft-server-" + c.Param("podName")
-
-	// Delete the pod using the global Kubernetes clientset
-	err := kubernetes.Clientset.CoreV1().Pods("minecharts").Delete(context.Background(), podName, metav1.DeleteOptions{})
+	// Retrieve the pod
+	pod, err := kubernetes.Clientset.CoreV1().Pods("minecharts").Get(context.Background(), podName, metav1.GetOptions{})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
+	// Check if the pod has the required label
+	if pod.Labels["created-by"] != "minecharts-api" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "You are not allowed to delete this pod"})
+		return
+	}
+
+	// Delete the pod
+	err = kubernetes.Clientset.CoreV1().Pods("minecharts").Delete(context.Background(), podName, metav1.DeleteOptions{})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"message": "Pod deleted", "podName": podName})
 }
