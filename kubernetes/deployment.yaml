@@ -15,7 +15,8 @@ spec:
     spec:
       serviceAccountName: minecharts
       containers:
-      - name: minecharts
-        image: ghcr.io/zent0x/minecharts:latest
-        ports:
-        - containerPort: 8080
+        - name: minecharts
+          image: ghcr.io/zent0x/minecharts:dev-latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
