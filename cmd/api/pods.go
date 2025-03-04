@@ -68,3 +68,19 @@ func CreateMinecraftPodHandler(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, newPod)
 }
+
+// DeleteMinecraftPodHandler deletes a Minecraft pod in the "minecharts" namespace.
+// It expects the pod name to be provided as a URL parameter.
+func DeleteMinecraftPodHandler(c *gin.Context) {
+
+	podName := "minecraft-server-" + c.Param("podName")
+
+	// Delete the pod using the global Kubernetes clientset
+	err := kubernetes.Clientset.CoreV1().Pods("minecharts").Delete(context.Background(), podName, metav1.DeleteOptions{})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Pod deleted", "podName": podName})
+}

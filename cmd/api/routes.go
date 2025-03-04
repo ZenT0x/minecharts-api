@@ -7,4 +7,5 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/ping", PingHandler)
 	router.GET("/pods", ListPodsHandler)
 	router.POST("/pods", CreateMinecraftPodHandler)
+	router.DELETE("/pods/:podName", DeleteMinecraftPodHandler)
 }
