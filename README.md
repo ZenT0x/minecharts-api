@@ -10,7 +10,7 @@ Minecharts is a Go API for managing Minecraft server pods on a Kubernetes cluste
 
 ## Getting Started
 ### Prerequisites
-  - Go (v1.20+)
+  - Go (v1.24+)
   - Docker
   - A Kubernetes cluster (Minikube, Kind, or cloud provider)
   - Air (for hot reload, optional)
