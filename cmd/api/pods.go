@@ -58,7 +58,7 @@ func CreateMinecraftPodHandler(c *gin.Context) {
 	// Create the PVC
 	_, err := kubernetes.Clientset.CoreV1().PersistentVolumeClaims("minecharts").Create(context.Background(), pvc, metav1.CreateOptions{})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create PVC"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create PVC" + err.Error()})
 		return
 	}
 
