@@ -127,8 +127,9 @@ func strPtr(s string) *string {
 
 // DeleteMinecraftPodHandler deletes a Minecraft pod and its associated PVC.
 func DeleteMinecraftPodHandler(c *gin.Context) {
-	podName := c.Param("podName")
-	pvcName := podName + "-pvc" // PVC name follows the pod name pattern
+	// Construct the pod and PVC names
+	podName := "minecraft-server-" + c.Param("podName")
+	pvcName := podName + "-pvc"
 
 	// Retrieve the pod
 	pod, err := kubernetes.Clientset.CoreV1().Pods("minecharts").Get(context.Background(), podName, metav1.GetOptions{})
