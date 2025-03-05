@@ -47,6 +47,10 @@ Run the application:
   - Version branches: For maintaining published versions (e.g., 1.4).
 
 # Roadmap
+  - [ ] ClusterIP + IngressRoute (Traefik specific Ingress controller support)
+  - [ ] ClusterIP + Ingress (All Ingress controller support)
+  - [ ] NodePort (Expose server port directly)
+  - [ ] LoadBalancer (Get Public IP for server)
   - [ ] Extend API endpoints for full Minecraft server management.
   - [ ] Develop a Kubernetes operator for automated resource handling.
   - [ ] Implement CI/CD pipelines for testing and deployment.
