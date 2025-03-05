@@ -82,6 +82,10 @@ func CreateMinecraftPodHandler(c *gin.Context) {
 							Name:  "EULA",
 							Value: "TRUE",
 						},
+						{
+							Name:  "MEMORY",
+							Value: "4G",
+						},
 					},
 					Ports: []corev1.ContainerPort{
 						{
