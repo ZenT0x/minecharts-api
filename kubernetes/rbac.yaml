@@ -15,9 +15,9 @@ metadata:
   name: minecharts
   namespace: minecharts
 rules:
-- apiGroups: [""]
-  resources: ["pods"]
-  verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods", "pvc"]
+    verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -25,9 +25,9 @@ metadata:
   name: minecharts
   namespace: minecharts
 subjects:
-- kind: ServiceAccount
-  name: minecharts
-  namespace: minecharts
+  - kind: ServiceAccount
+    name: minecharts
+    namespace: minecharts
 roleRef:
   kind: Role
   name: minecharts
