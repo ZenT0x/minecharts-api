@@ -3,6 +3,8 @@ package api
 import (
 	"context"
 	"net/http"
+	"os"
+	"strconv"
 
 	"minecharts/cmd/kubernetes"
 
@@ -10,60 +12,169 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 )
 
-// ListPodsHandler lists all pods in the "minecharts" namespace.
-func ListPodsHandler(c *gin.Context) {
-	pods, err := kubernetes.Clientset.CoreV1().Pods("minecharts").List(context.Background(), metav1.ListOptions{})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+// Global configuration variables (modifiable via environment variables)
+var (
+	DefaultNamespace = getEnv("MINECHARTS_NAMESPACE", "minecharts")
+	PodPrefix        = getEnv("MINECHARTS_POD_PREFIX", "minecraft-server-")
+	PVCSuffix        = getEnv("MINECHARTS_PVC_SUFFIX", "-pvc")
+	StorageSize      = getEnv("MINECHARTS_STORAGE_SIZE", "10Gi")
+	StorageClass     = getEnv("MINECHARTS_STORAGE_CLASS", "rook-ceph-block")
+	TerminationGrace = getEnvAsInt64("MINECHARTS_TERMINATION_GRACE", 310)
+	StopDuration     = getEnv("MINECHARTS_STOP_DURATION", "300")
+)
+
+// getEnv returns the value of the environment variable if set, otherwise returns fallback.
+func getEnv(key, fallback string) string {
+	if value, exists := os.LookupEnv(key); exists {
+		return value
 	}
-	c.JSON(http.StatusOK, pods)
+	return fallback
 }
 
-// CreateMinecraftPodHandler creates a new Minecraft pod with a dedicated PVC in the "minecharts" namespace.
-func CreateMinecraftPodHandler(c *gin.Context) {
+// getEnvAsInt64 returns the environment variable as int64 if set, otherwise returns fallback.
+func getEnvAsInt64(key string, fallback int64) int64 {
+	if value, exists := os.LookupEnv(key); exists {
+		if i, err := strconv.ParseInt(value, 10, 64); err == nil {
+			return i
+		}
+	}
+	return fallback
+}
+
+// ensurePVC checks if a PVC exists in the given namespace; if not, it creates one using the latest API types.
+func ensurePVC(namespace, pvcName string) error {
+	_, err := kubernetes.Clientset.CoreV1().PersistentVolumeClaims(namespace).Get(context.Background(), pvcName, metav1.GetOptions{})
+	if err == nil {
+		return nil // PVC exists.
+	}
+
+	pvc := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pvcName,
+			Namespace: namespace,
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{
+				corev1.ReadWriteOnce,
+			},
+			// Utilisation de VolumeResourceRequirements pour la dernière version de l'API
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: resource.MustParse("10Gi"),
+				},
+			},
+			StorageClassName: ptr.To(StorageClass),
+		},
+	}
+
+	_, err = kubernetes.Clientset.CoreV1().PersistentVolumeClaims(namespace).Create(context.Background(), pvc, metav1.CreateOptions{})
+	return err
+}
+
+// / createPod creates a Minecraft pod using the specified PVC.
+// La section Volumes utilise maintenant VolumeSource avec PersistentVolumeClaim.
+func createPod(namespace, podName, pvcName string) error {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: podName,
+			Labels: map[string]string{
+				"created-by": "minecharts-api",
+			},
+		},
+		Spec: corev1.PodSpec{
+			TerminationGracePeriodSeconds: ptr.To[int64](TerminationGrace),
+			Containers: []corev1.Container{
+				{
+					Name:  "minecraft-server",
+					Image: "itzg/minecraft-server",
+					Env: []corev1.EnvVar{
+						{
+							Name:  "EULA",
+							Value: "TRUE",
+						},
+						{
+							Name:  "STOP_DURATION",
+							Value: StopDuration,
+						},
+					},
+					Ports: []corev1.ContainerPort{
+						{
+							ContainerPort: 25565,
+							Protocol:      corev1.ProtocolTCP,
+						},
+					},
+					VolumeMounts: []corev1.VolumeMount{
+						{
+							Name:      "minecraft-storage",
+							MountPath: "/data",
+						},
+					},
+				},
+			},
+			Volumes: []corev1.Volume{
+				{
+					Name: "minecraft-storage",
+					VolumeSource: corev1.VolumeSource{
+						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+							ClaimName: pvcName,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	_, err := kubernetes.Clientset.CoreV1().Pods(namespace).Create(context.Background(), pod, metav1.CreateOptions{})
+	return err
+}
+
+// StartMinecraftPodHandler creates a new Minecraft pod using a dedicated PVC.
+// It expects a JSON body with "podName" and an optional "env" map for additional environment variables.
+func StartMinecraftPodHandler(c *gin.Context) {
+	// Define the expected request structure.
 	var req struct {
-		PodName string `json:"podName"`
+		PodName string            `json:"podName"`
+		Env     map[string]string `json:"env"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Construct the pod and PVC names
-	podName := "minecraft-server-" + req.PodName
-	pvcName := podName + "-pvc" // Unique PVC name per pod
+	// Centralized configuration variables.
+	baseName := req.PodName
+	podName := PodPrefix + baseName
+	pvcName := podName + PVCSuffix
 
-	// Define the PVC
-	pvc := &corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      pvcName,
-			Namespace: "minecharts",
-		},
-		Spec: corev1.PersistentVolumeClaimSpec{
-			AccessModes: []corev1.PersistentVolumeAccessMode{
-				corev1.ReadWriteOnce,
-			},
-			Resources: corev1.VolumeResourceRequirements{
-				Requests: corev1.ResourceList{
-					corev1.ResourceStorage: resource.MustParse("10Gi"),
-				},
-			},
-			StorageClassName: strPtr("rook-ceph-block"),
-		},
-	}
-
-	// Create the PVC
-	_, err := kubernetes.Clientset.CoreV1().PersistentVolumeClaims("minecharts").Create(context.Background(), pvc, metav1.CreateOptions{})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create PVC"})
+	// Ensure the PVC exists (create it if necessary).
+	if err := ensurePVC(DefaultNamespace, pvcName); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to ensure PVC: " + err.Error()})
 		return
 	}
 
-	// Define the Minecraft Pod with the dynamically created PVC
+	// Prepare default environment variables.
+	envVars := []corev1.EnvVar{
+		{
+			Name:  "EULA",
+			Value: "TRUE",
+		},
+		{
+			Name:  "STOP_DURATION",
+			Value: StopDuration,
+		},
+	}
+	// Append additional environment variables provided in the request.
+	for key, value := range req.Env {
+		envVars = append(envVars, corev1.EnvVar{
+			Name:  key,
+			Value: value,
+		})
+	}
+
+	// Define the Minecraft pod with the PVC mounted.
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: podName,
@@ -72,21 +183,12 @@ func CreateMinecraftPodHandler(c *gin.Context) {
 			},
 		},
 		Spec: corev1.PodSpec{
-			TerminationGracePeriodSeconds: pointer.Int64(180),
+			TerminationGracePeriodSeconds: ptr.To[int64](TerminationGrace),
 			Containers: []corev1.Container{
 				{
 					Name:  "minecraft-server",
 					Image: "itzg/minecraft-server",
-					Env: []corev1.EnvVar{
-						{
-							Name:  "EULA",
-							Value: "TRUE",
-						},
-						{
-							Name:  "MEMORY",
-							Value: "4G",
-						},
-					},
+					Env:   envVars,
 					Ports: []corev1.ContainerPort{
 						{
 							ContainerPort: 25565,
@@ -114,163 +216,31 @@ func CreateMinecraftPodHandler(c *gin.Context) {
 		},
 	}
 
-	// Create the pod
-	_, err = kubernetes.Clientset.CoreV1().Pods("minecharts").Create(context.Background(), pod, metav1.CreateOptions{})
-	if err != nil {
-		// If pod creation fails, rollback and delete the PVC
-		_ = kubernetes.Clientset.CoreV1().PersistentVolumeClaims("minecharts").Delete(context.Background(), pvcName, metav1.DeleteOptions{})
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create pod"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "Minecraft pod created with persistent storage", "podName": podName, "pvcName": pvcName})
-}
-
-// strPtr is a helper function to return a pointer to a string
-func strPtr(s string) *string {
-	return &s
-}
-
-// DeleteMinecraftPodHandler deletes a Minecraft pod and its associated PVC.
-func DeleteMinecraftPodHandler(c *gin.Context) {
-	// Construct the pod and PVC names
-	podName := "minecraft-server-" + c.Param("podName")
-	pvcName := podName + "-pvc"
-
-	// Retrieve the pod
-	pod, err := kubernetes.Clientset.CoreV1().Pods("minecharts").Get(context.Background(), podName, metav1.GetOptions{})
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Pod not found"})
-		return
-	}
-
-	if pod.Labels["created-by"] != "minecharts-api" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "You are not allowed to delete this pod"})
-		return
-	}
-
-	// Delete the pod
-	err = kubernetes.Clientset.CoreV1().Pods("minecharts").Delete(context.Background(), podName, metav1.DeleteOptions{})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete pod"})
-		return
-	}
-
-	// Delete the PVC
-	err = kubernetes.Clientset.CoreV1().PersistentVolumeClaims("minecharts").Delete(context.Background(), pvcName, metav1.DeleteOptions{})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Pod deleted but failed to delete PVC"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "Pod and PVC deleted", "podName": podName, "pvcName": pvcName})
-}
-
-// StartMinecraftPodHandler creates a new pod using an existing PVC (or creates a new one if missing).
-func StartMinecraftPodHandler(c *gin.Context) {
-	podName := "minecraft-server-" + c.Param("podName")
-	pvcName := podName + "-pvc"
-
-	// Check if the PVC exists
-	_, err := kubernetes.Clientset.CoreV1().PersistentVolumeClaims("minecharts").Get(context.Background(), pvcName, metav1.GetOptions{})
-	if err != nil {
-		// If PVC does not exist, create it
-		pvc := &corev1.PersistentVolumeClaim{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      pvcName,
-				Namespace: "minecharts",
-			},
-			Spec: corev1.PersistentVolumeClaimSpec{
-				AccessModes: []corev1.PersistentVolumeAccessMode{
-					corev1.ReadWriteOnce,
-				},
-				Resources: corev1.VolumeResourceRequirements{
-					Requests: corev1.ResourceList{
-						corev1.ResourceStorage: resource.MustParse("10Gi"),
-					},
-				},
-				StorageClassName: strPtr("rook-ceph-block"),
-			},
-		}
-
-		_, err := kubernetes.Clientset.CoreV1().PersistentVolumeClaims("minecharts").Create(context.Background(), pvc, metav1.CreateOptions{})
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create PVC"})
-			return
-		}
-	}
-
-	// Define the Minecraft Pod
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: podName,
-			Labels: map[string]string{
-				"created-by": "minecharts-api",
-			},
-		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{
-					Name:  "minecraft-server",
-					Image: "itzg/minecraft-server",
-					Env: []corev1.EnvVar{
-						{
-							Name:  "EULA",
-							Value: "TRUE",
-						},
-					},
-					Ports: []corev1.ContainerPort{
-						{
-							ContainerPort: 25565,
-							Protocol:      corev1.ProtocolTCP,
-						},
-					},
-					VolumeMounts: []corev1.VolumeMount{
-						{
-							Name:      "minecraft-storage",
-							MountPath: "/data",
-						},
-					},
-				},
-			},
-			Volumes: []corev1.Volume{
-				{
-					Name: "minecraft-storage",
-					VolumeSource: corev1.VolumeSource{
-						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-							ClaimName: pvcName,
-						},
-					},
-				},
-			},
-		},
-	}
-
-	// Create the pod
-	_, err = kubernetes.Clientset.CoreV1().Pods("minecharts").Create(context.Background(), pod, metav1.CreateOptions{})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create pod"})
+	// Create the pod in the configured namespace.
+	if _, err := kubernetes.Clientset.CoreV1().Pods(DefaultNamespace).Create(context.Background(), pod, metav1.CreateOptions{}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create pod: " + err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Minecraft server started", "podName": podName, "pvcName": pvcName})
 }
 
-// StopMinecraftPodHandler deletes a Minecraft pod but keeps its PVC.
+// StopMinecraftPodHandler deletes the pod without deleting its associated PVC.
 func StopMinecraftPodHandler(c *gin.Context) {
-	podName := "minecraft-server-" + c.Param("podName")
+	baseName := c.Param("podName")
+	podName := PodPrefix + baseName
 
-	// Check if the pod exists
-	_, err := kubernetes.Clientset.CoreV1().Pods("minecharts").Get(context.Background(), podName, metav1.GetOptions{})
+	// Verify the pod exists
+	_, err := kubernetes.Clientset.CoreV1().Pods(DefaultNamespace).Get(context.Background(), podName, metav1.GetOptions{})
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Pod not found"})
 		return
 	}
 
-	// Delete the pod only (keep the PVC)
-	err = kubernetes.Clientset.CoreV1().Pods("minecharts").Delete(context.Background(), podName, metav1.DeleteOptions{})
+	// Delete the pod while retaining the PVC
+	err = kubernetes.Clientset.CoreV1().Pods(DefaultNamespace).Delete(context.Background(), podName, metav1.DeleteOptions{})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete pod"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete pod: " + err.Error()})
 		return
 	}
 
