@@ -16,8 +16,11 @@ metadata:
   namespace: minecharts
 rules:
   - apiGroups: [""]
-    resources: ["pods", "pvc"]
+    resources: ["pods"]
     verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["create", "get", "list", "delete"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
