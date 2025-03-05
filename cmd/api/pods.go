@@ -159,3 +159,30 @@ func DeleteMinecraftPodHandler(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "Pod and PVC deleted", "podName": podName, "pvcName": pvcName})
 }
+
+// DeleteMinecraftPodHandler deletes a Minecraft pod and its associated PVC.
+func StopMinecraftPodHandler(c *gin.Context) {
+	// Construct the pod and PVC names
+	podName := "minecraft-server-" + c.Param("podName")
+
+	// Retrieve the pod
+	pod, err := kubernetes.Clientset.CoreV1().Pods("minecharts").Get(context.Background(), podName, metav1.GetOptions{})
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Pod not found"})
+		return
+	}
+
+	if pod.Labels["created-by"] != "minecharts-api" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "You are not allowed to delete this pod"})
+		return
+	}
+
+	// Delete the pod
+	err = kubernetes.Clientset.CoreV1().Pods("minecharts").Delete(context.Background(), podName, metav1.DeleteOptions{})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete pod"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Pod ", "podName": podName})
+}

@@ -8,4 +8,5 @@ func SetupRoutes(router *gin.Engine) {
 	router.GET("/pods", ListPodsHandler)
 	router.POST("/pods", CreateMinecraftPodHandler)
 	router.DELETE("/pods/:podName", DeleteMinecraftPodHandler)
+	router.POST("/pods/:podName/stop", StopMinecraftPodHandler)
 }
