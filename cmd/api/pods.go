@@ -10,6 +10,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/pointer"
 )
 
 // ListPodsHandler lists all pods in the "minecharts" namespace.
@@ -71,6 +72,7 @@ func CreateMinecraftPodHandler(c *gin.Context) {
 			},
 		},
 		Spec: corev1.PodSpec{
+			TerminationGracePeriodSeconds: pointer.Int64(180),
 			Containers: []corev1.Container{
 				{
 					Name:  "minecraft-server",
