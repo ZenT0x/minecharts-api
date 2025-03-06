@@ -11,9 +11,9 @@ jobs:
     steps:
       # Checkout the repository.
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
-      # Cache Node modules for semantic-release.
+      # Cache node modules for semantic-release.
       - name: Cache node modules
         uses: actions/cache@v3
         with:
@@ -24,7 +24,7 @@ jobs:
 
       # Set up Node.js.
       - name: Setup Node.js
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v4
         with:
           node-version: "16"
 
@@ -32,7 +32,7 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      # Run semantic-release to analyze commits and publish a new version.
+      # Run semantic-release to publish a new version.
       - name: Run semantic-release
         id: semantic_release
         env:
@@ -44,30 +44,29 @@ jobs:
         id: get_version
         run: echo "version=$(node -p \"require('./package.json').version\")" >> $GITHUB_OUTPUT
 
-      # Cache Go modules to speed up the build.
-      - name: Cache Go modules
-        uses: actions/cache@v3
+      # Setup Go environment with caching using lukka/golang-with-cache@v5.
+      - name: Setup Go with cache
+        uses: lukka/golang-with-cache@v5
         with:
-          path: |
+          go-version: "1.24"
+          cache-key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          cache-path: |
             ~/.cache/go-build
-            $(go env GOPATH)/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+            ${{ env.GOPATH }}/pkg/mod
 
-      # Set up Docker Buildx (BuildKit) for advanced build options.
+      # Set up Docker Buildx.
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v2
 
       # Log in to GitHub Container Registry.
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v1
+        uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Build and push the Docker image with two tags: latest and the version number.
+      # Build and push the Docker image with tags "latest" and the version number.
       - name: Build and push Docker image for Main
         uses: docker/build-push-action@v2
         with:
