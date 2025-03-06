@@ -1,14 +1,19 @@
-# Step 1 : Build
+# Stage 1: Build the static binary
 FROM golang:1.24-alpine AS builder
 WORKDIR /app
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-RUN go build -o build/minecharts ./cmd
+ENV CGO_ENABLED=0
 
-# Step 2 : Execution
-FROM alpine:latest
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+
+COPY . .
+RUN go build -a -installsuffix cgo -ldflags="-s -w" -o build/minecharts ./cmd
+
+# Stage 2: Create the minimal image using scratch
+FROM scratch
 WORKDIR /app
+
 COPY --from=builder /app/build/minecharts .
+
 EXPOSE 8080
-CMD ["./minecharts"]
+ENTRYPOINT ["./minecharts"]
