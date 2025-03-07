@@ -53,7 +53,7 @@ func saveWorld(podName, namespace string) (stdout, stderr string, err error) {
 	stdout, stderr, err = executeCommandInPod(podName, namespace, "minecraft-server", "mc-send-to-console save-all")
 	if err == nil {
 		// Wait for the save to complete
-		time.Sleep(1 * time.Second)
+		time.Sleep(10 * time.Second)
 	}
 	return stdout, stderr, err
 }
