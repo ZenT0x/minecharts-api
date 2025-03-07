@@ -208,7 +208,7 @@ func DeleteMinecraftPodHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Pod and PVC deleted", "podName": podName, "pvcName": pvcName})
 }
 
-// ExecCommandHandler executes an arbitrary shell command in the Minecraft pod.
+// ExecCommandHandler executes a Minecraft command in the pod.
 func ExecCommandHandler(c *gin.Context) {
 	// Retrieve the base name of the pod from the URL and form the full name.
 	baseName := c.Param("podName")
@@ -223,6 +223,9 @@ func ExecCommandHandler(c *gin.Context) {
 		return
 	}
 
+	// Prepare the Minecraft command with mc-send-to-console
+	execCommand := "mc-send-to-console " + req.Command
+
 	// Prepare the execution request in the pod.
 	execRequest := kubernetes.Clientset.CoreV1().RESTClient().
 		Post().
@@ -231,7 +234,7 @@ func ExecCommandHandler(c *gin.Context) {
 		Name(podName).
 		SubResource("exec").
 		VersionedParams(&corev1.PodExecOptions{
-			Command:   []string{"sh", "-c", req.Command},
+			Command:   []string{"sh", "-c", execCommand},
 			Stdin:     false,
 			Stdout:    true,
 			Stderr:    true,
@@ -260,5 +263,9 @@ func ExecCommandHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"stdout": stdout.String(), "stderr": stderr.String()})
+	c.JSON(http.StatusOK, gin.H{
+		"stdout":  stdout.String(),
+		"stderr":  stderr.String(),
+		"command": req.Command,
+	})
 }
