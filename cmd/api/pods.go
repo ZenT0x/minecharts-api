@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	corev1 "k8s.io/api/core/v1"
@@ -177,14 +178,29 @@ func StopMinecraftPodHandler(c *gin.Context) {
 		return
 	}
 
-	// Deletes the pod while keeping the PVC.
+	// First, save the world with save-all command
+	stdout, stderr, err := executeCommandInPod(podName, DefaultNamespace, "minecraft-server", "mc-send-to-console save-all")
+	if err == nil {
+		// Give the server a moment to complete the saving process
+		time.Sleep(5 * time.Second)
+	}
+
+	// Now proceed with stopping the server
 	err = kubernetes.Clientset.CoreV1().Pods(DefaultNamespace).Delete(context.Background(), podName, metav1.DeleteOptions{})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete pod: " + err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Pod stopped, PVC retained", "podName": podName})
+	response := gin.H{"message": "Pod stopped, PVC retained", "podName": podName}
+
+	// Add save information if available
+	if stdout != "" || stderr != "" {
+		response["save_stdout"] = stdout
+		response["save_stderr"] = stderr
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 // DeleteMinecraftPodHandler deletes the pod if it exists, then deletes its associated PVC.
@@ -224,16 +240,38 @@ func ExecCommandHandler(c *gin.Context) {
 	// Prepare the Minecraft command with mc-send-to-console
 	execCommand := "mc-send-to-console " + req.Command
 
+	// Execute the command
+	stdout, stderr, err := executeCommandInPod(podName, DefaultNamespace, "minecraft-server", execCommand)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to execute command: " + err.Error(),
+			"stderr":  stderr,
+			"command": req.Command,
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"stdout":  stdout,
+		"stderr":  stderr,
+		"command": req.Command,
+	})
+}
+
+// executeCommandInPod executes a command in the specified pod and returns the output.
+// This is a utility function to avoid code duplication across handlers.
+func executeCommandInPod(podName, namespace, containerName, command string) (stdout, stderr string, err error) {
 	// Prepare the execution request in the pod.
 	execReq := kubernetes.Clientset.CoreV1().RESTClient().Post().
 		Resource("pods").
 		Name(podName).
-		Namespace(DefaultNamespace).
+		Namespace(namespace).
 		SubResource("exec")
 
 	execReq.VersionedParams(&corev1.PodExecOptions{
-		Command:   []string{"sh", "-c", execCommand},
-		Container: "minecraft-server",
+		Command:   []string{"sh", "-c", command},
+		Container: containerName,
 		Stdout:    true,
 		Stderr:    true,
 		Stdin:     false,
@@ -243,30 +281,16 @@ func ExecCommandHandler(c *gin.Context) {
 	// Create executor
 	executor, err := remotecommand.NewSPDYExecutor(kubernetes.Config, "POST", execReq.URL())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create executor: " + err.Error()})
-		return
+		return "", "", err
 	}
 
 	// Capture the command output
-	var stdout, stderr bytes.Buffer
+	var stdoutBuf, stderrBuf bytes.Buffer
 	err = executor.StreamWithContext(context.Background(), remotecommand.StreamOptions{
-		Stdout: &stdout,
-		Stderr: &stderr,
-		Stdin:  nil, // Explicitement nil
+		Stdout: &stdoutBuf,
+		Stderr: &stderrBuf,
+		Stdin:  nil,
 	})
 
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Failed to execute command: " + err.Error(),
-			"stderr":  stderr.String(),
-			"command": req.Command,
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"stdout":  stdout.String(),
-		"stderr":  stderr.String(),
-		"command": req.Command,
-	})
+	return stdoutBuf.String(), stderrBuf.String(), err
 }
