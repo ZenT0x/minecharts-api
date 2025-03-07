@@ -24,8 +24,6 @@ var (
 	PVCSuffix        = getEnv("MINECHARTS_PVC_SUFFIX", "-pvc")
 	StorageSize      = getEnv("MINECHARTS_STORAGE_SIZE", "10Gi")
 	StorageClass     = getEnv("MINECHARTS_STORAGE_CLASS", "rook-ceph-block")
-	TerminationGrace = getEnvAsInt64("MINECHARTS_TERMINATION_GRACE", 310)
-	StopDuration     = getEnv("MINECHARTS_STOP_DURATION", "300")
 )
 
 func getEnv(key, fallback string) string {
@@ -82,7 +80,6 @@ func createPod(namespace, podName, pvcName string, envVars []corev1.EnvVar) erro
 			},
 		},
 		Spec: corev1.PodSpec{
-			TerminationGracePeriodSeconds: ptr.To[int64](TerminationGrace),
 			Containers: []corev1.Container{
 				{
 					Name:  "minecraft-server",
@@ -145,10 +142,6 @@ func StartMinecraftPodHandler(c *gin.Context) {
 		{
 			Name:  "EULA",
 			Value: "TRUE",
-		},
-		{
-			Name:  "STOP_DURATION",
-			Value: StopDuration,
 		},
 		{
 			Name:  "CREATE_CONSOLE_IN_PIPE",
@@ -245,7 +238,7 @@ func ExecCommandHandler(c *gin.Context) {
 		Stderr:    true,
 		Stdin:     false,
 		TTY:       false,
-	}, scheme.ParameterCodec) // Utilisez scheme.ParameterCodec au lieu de metav1.ParameterCodec
+	}, scheme.ParameterCodec)
 
 	// Create executor
 	executor, err := remotecommand.NewSPDYExecutor(kubernetes.Config, "POST", execReq.URL())
