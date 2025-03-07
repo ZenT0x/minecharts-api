@@ -13,22 +13,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Set up Go.
-      - name: Setup Golang
-        uses: actions/setup-go@v5
+      # Setup Golang with cache.
+      - name: Setup Golang with cache
+        uses: magnetikonline/action-golang-cache@v5
         with:
           go-version-file: go.mod
-
-      # Cache Go build and module dependencies.
-      - name: Setup Golang caches
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-golang-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-golang-
 
       # Download Go dependencies.
       - name: Download Go dependencies
