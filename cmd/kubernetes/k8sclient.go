@@ -11,12 +11,15 @@ import (
 )
 
 // Clientset is a global Kubernetes clientset instance.
-var Clientset *kubernetes.Clientset
+// In your kubernetes package
+var (
+	Clientset *kubernetes.Clientset
+	Config    *rest.Config
+)
 
 // Init initializes the global Kubernetes clientset.
 // It uses the local kubeconfig if available; otherwise, it falls back to in-cluster config.
 func Init() error {
-	var config *rest.Config
 	var err error
 	var kubeconfig string
 
@@ -29,17 +32,16 @@ func Init() error {
 
 	// Use kubeconfig if available; otherwise, use in-cluster config.
 	if _, err := os.Stat(kubeconfig); err == nil {
-		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
+		Config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
 		if err != nil {
 			return err
 		}
 	} else {
-		config, err = rest.InClusterConfig()
+		Config, err = rest.InClusterConfig()
 		if err != nil {
 			return err
 		}
 	}
-
-	Clientset, err = kubernetes.NewForConfig(config)
+	Clientset, err = kubernetes.NewForConfig(Config)
 	return err
 }

@@ -1,17 +1,18 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"minecharts/cmd/kubernetes"
 	"net/http"
 	"os"
 	"strconv"
-
-	"minecharts/cmd/kubernetes"
 
 	"github.com/gin-gonic/gin"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/utils/ptr"
 )
 
@@ -238,7 +239,7 @@ func ExecCommandHandler(c *gin.Context) {
 			Container: "minecraft-server", // Must match the container name in the pod
 		}, metav1.ParameterCodec)
 
-	executor, err := remotecommand.NewSPDYExecutor(kubernetes.Clientset.RESTConfig(), "POST", execRequest.URL())
+	executor, err := remotecommand.NewSPDYExecutor(kubernetes.Config, "POST", execRequest.URL())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create executor: " + err.Error()})
 		return
