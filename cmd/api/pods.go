@@ -149,6 +149,10 @@ func StartMinecraftPodHandler(c *gin.Context) {
 			Name:  "STOP_DURATION",
 			Value: StopDuration,
 		},
+		{
+			Name:  "CREATE_CONSOLE_IN_PIPE",
+			Value: "true",
+		},
 	}
 	// Adds additional environment variables provided in the request.
 	for key, value := range req.Env {
