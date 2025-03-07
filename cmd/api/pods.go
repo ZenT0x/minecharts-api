@@ -248,12 +248,15 @@ func ExecCommandHandler(c *gin.Context) {
 	// Capture the command output
 	var stdout, stderr bytes.Buffer
 	err = executor.StreamWithContext(context.Background(), remotecommand.StreamOptions{
-		Stdin:  nil,
 		Stdout: &stdout,
 		Stderr: &stderr,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to execute command: " + err.Error(), "stderr": stderr.String()})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to execute command: " + err.Error(),
+			"stderr":  stderr.String(),
+			"command": req.Command,
+		})
 		return
 	}
 
