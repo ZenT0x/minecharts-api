@@ -247,7 +247,7 @@ func ExecCommandHandler(c *gin.Context) {
 
 	// Capture the command output
 	var stdout, stderr bytes.Buffer
-	err = executor.Stream(remotecommand.StreamOptions{
+	err = executor.StreamWithContext(context.Background(), remotecommand.StreamOptions{
 		Stdout: &stdout,
 		Stderr: &stderr,
 	})
