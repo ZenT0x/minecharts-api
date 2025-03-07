@@ -206,3 +206,54 @@ func DeleteMinecraftPodHandler(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "Pod and PVC deleted", "podName": podName, "pvcName": pvcName})
 }
+
+// ExecCommandHandler executes an arbitrary shell command in the Minecraft pod.
+func ExecCommandHandler(c *gin.Context) {
+	// Retrieve the base name of the pod from the URL and form the full name.
+	baseName := c.Param("podName")
+	podName := PodPrefix + baseName
+
+	// Expected structure in the body to get the command.
+	var req struct {
+		Command string `json:"command"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Prepare the execution request in the pod.
+	execRequest := kubernetes.Clientset.CoreV1().RESTClient().
+		Post().
+		Namespace(DefaultNamespace).
+		Resource("pods").
+		Name(podName).
+		SubResource("exec").
+		VersionedParams(&corev1.PodExecOptions{
+			Command:   []string{"sh", "-c", req.Command},
+			Stdin:     false,
+			Stdout:    true,
+			Stderr:    true,
+			TTY:       false,
+			Container: "minecraft-server", // Must match the container name in the pod
+		}, metav1.ParameterCodec)
+
+	executor, err := remotecommand.NewSPDYExecutor(kubernetes.Clientset.RESTConfig(), "POST", execRequest.URL())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create executor: " + err.Error()})
+		return
+	}
+
+	// Capture the command output
+	var stdout, stderr bytes.Buffer
+	err = executor.Stream(remotecommand.StreamOptions{
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to execute command: " + err.Error(), "stderr": stderr.String()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"stdout": stdout.String(), "stderr": stderr.String()})
+}
