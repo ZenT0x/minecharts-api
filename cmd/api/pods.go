@@ -12,6 +12,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/utils/ptr"
 )
@@ -231,22 +232,23 @@ func ExecCommandHandler(c *gin.Context) {
 	execCommand := "mc-send-to-console " + req.Command
 
 	// Prepare the execution request in the pod.
-	execRequest := kubernetes.Clientset.CoreV1().RESTClient().
-		Post().
-		Namespace(DefaultNamespace).
+	execReq := kubernetes.Clientset.CoreV1().RESTClient().Post().
 		Resource("pods").
 		Name(podName).
-		SubResource("exec").
-		VersionedParams(&corev1.PodExecOptions{
-			Command:   []string{"sh", "-c", execCommand},
-			Stdin:     false,
-			Stdout:    true,
-			Stderr:    true,
-			TTY:       false,
-			Container: "minecraft-server", // Must match the container name in the pod
-		}, metav1.ParameterCodec)
+		Namespace(DefaultNamespace).
+		SubResource("exec")
 
-	executor, err := remotecommand.NewSPDYExecutor(kubernetes.Config, "POST", execRequest.URL())
+	execReq.VersionedParams(&corev1.PodExecOptions{
+		Command:   []string{"sh", "-c", execCommand},
+		Container: "minecraft-server",
+		Stdout:    true,
+		Stderr:    true,
+		Stdin:     false,
+		TTY:       false,
+	}, scheme.ParameterCodec) // Utilisez scheme.ParameterCodec au lieu de metav1.ParameterCodec
+
+	// Create executor
+	executor, err := remotecommand.NewSPDYExecutor(kubernetes.Config, "POST", execReq.URL())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create executor: " + err.Error()})
 		return
@@ -257,7 +259,9 @@ func ExecCommandHandler(c *gin.Context) {
 	err = executor.StreamWithContext(context.Background(), remotecommand.StreamOptions{
 		Stdout: &stdout,
 		Stderr: &stderr,
+		Stdin:  nil, // Explicitement nil
 	})
+
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":   "Failed to execute command: " + err.Error(),
