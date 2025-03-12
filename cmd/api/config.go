@@ -7,10 +7,11 @@ import (
 // Global configuration variables, configurable via environment variables.
 var (
 	DefaultNamespace = getEnv("MINECHARTS_NAMESPACE", "minecharts")
-	PodPrefix        = getEnv("MINECHARTS_POD_PREFIX", "minecraft-server-")
+	DeploymentPrefix = getEnv("MINECHARTS_DEPLOYMENT_PREFIX", "minecraft-server-")
 	PVCSuffix        = getEnv("MINECHARTS_PVC_SUFFIX", "-pvc")
 	StorageSize      = getEnv("MINECHARTS_STORAGE_SIZE", "10Gi")
 	StorageClass     = getEnv("MINECHARTS_STORAGE_CLASS", "rook-ceph-block")
+	DefaultReplicas  = 1
 )
 
 func getEnv(key, fallback string) string {

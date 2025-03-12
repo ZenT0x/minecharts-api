@@ -4,9 +4,14 @@ import "github.com/gin-gonic/gin"
 
 // SetupRoutes registers the API routes.
 func SetupRoutes(router *gin.Engine) {
-	router.POST("/pods/:podName/start", StartMinecraftPodHandler)
-	router.POST("/pods/:podName/restart", RestartMinecraftPodHandler)
-	router.POST("/pods/:podName/stop", StopMinecraftPodHandler)
-	router.DELETE("/pods/:podName", DeleteMinecraftPodHandler)
-	router.POST("/pods/:podName/exec", ExecCommandHandler)
+	// Ping endpoint for health checks
+	router.GET("/ping", PingHandler)
+
+	// Server management endpoints
+	router.POST("/servers", StartMinecraftServerHandler)
+	router.POST("/servers/:serverName/restart", RestartMinecraftServerHandler)
+	router.POST("/servers/:serverName/stop", StopMinecraftServerHandler)
+	router.POST("/servers/:serverName/start", StartStoppedServerHandler)
+	router.DELETE("/servers/:serverName", DeleteMinecraftServerHandler)
+	router.POST("/servers/:serverName/exec", ExecCommandHandler)
 }

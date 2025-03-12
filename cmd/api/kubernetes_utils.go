@@ -7,30 +7,31 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 )
 
-// checkPodExists vérifie si un pod existe et renvoie une erreur HTTP s'il n'existe pas
-func checkPodExists(c *gin.Context, namespace, podName string) (*corev1.Pod, bool) {
-	pod, err := kubernetes.Clientset.CoreV1().Pods(namespace).Get(context.Background(), podName, metav1.GetOptions{})
+// checkDeploymentExists checks if a deployment exists and returns an HTTP error if it does not
+func checkDeploymentExists(c *gin.Context, namespace, deploymentName string) (*appsv1.Deployment, bool) {
+	deployment, err := kubernetes.Clientset.AppsV1().Deployments(namespace).Get(context.Background(), deploymentName, metav1.GetOptions{})
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Pod not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "Deployment not found"})
 		return nil, false
 	}
-	return pod, true
+	return deployment, true
 }
 
-// getPodInfo returns the pod and PVC names from a Gin context.
-func getPodInfo(c *gin.Context) (podName, pvcName string) {
+// getServerInfo returns the deployment and PVC names from a Gin context.
+func getServerInfo(c *gin.Context) (deploymentName, pvcName string) {
 	// Extract the server name from the URL parameter
-	serverName := c.Param("podName")
+	serverName := c.Param("serverName")
 
-	// Build the full pod and PVC names
-	podName = PodPrefix + serverName
-	pvcName = podName + PVCSuffix
+	// Build the full deployment and PVC names
+	deploymentName = DeploymentPrefix + serverName
+	pvcName = deploymentName + PVCSuffix
 	return
 }
 
@@ -62,69 +63,122 @@ func ensurePVC(namespace, pvcName string) error {
 	return err
 }
 
-// createPod creates a Minecraft pod using the specified PVC, with the provided environment variables.
-func createPod(namespace, podName, pvcName string, envVars []corev1.EnvVar) error {
-	pod := &corev1.Pod{
+// createDeployment creates a Minecraft deployment using the specified PVC, with the provided environment variables.
+func createDeployment(namespace, deploymentName, pvcName string, envVars []corev1.EnvVar) error {
+	replicas := int32(DefaultReplicas)
+
+	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: podName,
+			Name: deploymentName,
 			Labels: map[string]string{
 				"created-by": "minecharts-api",
+				"app":        deploymentName,
 			},
 		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{
-					Name:  "minecraft-server",
-					Image: "itzg/minecraft-server",
-					Env:   envVars,
-					Ports: []corev1.ContainerPort{
-						{
-							ContainerPort: 25565,
-							Protocol:      corev1.ProtocolTCP,
-						},
-					},
-					VolumeMounts: []corev1.VolumeMount{
-						{
-							Name:      "minecraft-storage",
-							MountPath: "/data",
-						},
-					},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app": deploymentName,
 				},
 			},
-			Volumes: []corev1.Volume{
-				{
-					Name: "minecraft-storage",
-					VolumeSource: corev1.VolumeSource{
-						PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-							ClaimName: pvcName,
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"app": deploymentName,
+					},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "minecraft-server",
+							Image: "itzg/minecraft-server",
+							Env:   envVars,
+							Ports: []corev1.ContainerPort{
+								{
+									ContainerPort: 25565,
+									Protocol:      corev1.ProtocolTCP,
+								},
+							},
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      "minecraft-storage",
+									MountPath: "/data",
+								},
+							},
+						},
+					},
+					Volumes: []corev1.Volume{
+						{
+							Name: "minecraft-storage",
+							VolumeSource: corev1.VolumeSource{
+								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+									ClaimName: pvcName,
+								},
+							},
 						},
 					},
 				},
 			},
 		},
 	}
-	_, err := kubernetes.Clientset.CoreV1().Pods(namespace).Create(context.Background(), pod, metav1.CreateOptions{})
+
+	_, err := kubernetes.Clientset.AppsV1().Deployments(namespace).Create(context.Background(), deployment, metav1.CreateOptions{})
 	return err
 }
 
-// restartPod restarts a pod using the same configuration
-func restartPod(podName, pvcName string, envVars []corev1.EnvVar) error {
-	// Delete the pod
-	err := kubernetes.Clientset.CoreV1().Pods(DefaultNamespace).Delete(context.Background(), podName, metav1.DeleteOptions{})
+// restartDeployment restarts a deployment by updating an annotation
+func restartDeployment(namespace, deploymentName string) error {
+	deployment, err := kubernetes.Clientset.AppsV1().Deployments(namespace).Get(context.Background(), deploymentName, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
 
-	// Wait for the pod to be completely deleted
-	for range 30 {
-		_, err := kubernetes.Clientset.CoreV1().Pods(DefaultNamespace).Get(context.Background(), podName, metav1.GetOptions{})
-		if err != nil {
-			// Pod successfully deleted
-			break
-		}
-		time.Sleep(1 * time.Second)
+	if deployment.Spec.Template.Annotations == nil {
+		deployment.Spec.Template.Annotations = make(map[string]string)
 	}
 
-	// Create a new pod with the same configuration
-	return createPod(DefaultNamespace, podName, pvcName, envVars)
+	// Add or update a restart timestamp annotation
+	deployment.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
+
+	_, err = kubernetes.Clientset.AppsV1().Deployments(namespace).Update(context.Background(), deployment, metav1.UpdateOptions{})
+	return err
+}
+
+// updateDeployment updates a deployment with new environment variables
+func updateDeployment(namespace, deploymentName string, envVars []corev1.EnvVar) error {
+	deployment, err := kubernetes.Clientset.AppsV1().Deployments(namespace).Get(context.Background(), deploymentName, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+
+	// Update environment variables for the minecraft-server container
+	for i := range deployment.Spec.Template.Spec.Containers {
+		if deployment.Spec.Template.Spec.Containers[i].Name == "minecraft-server" {
+			deployment.Spec.Template.Spec.Containers[i].Env = envVars
+			break
+		}
+	}
+
+	_, err = kubernetes.Clientset.AppsV1().Deployments(namespace).Update(context.Background(), deployment, metav1.UpdateOptions{})
+	return err
+}
+
+// getMinecraftPod gets the first pod associated with a deployment
+func getMinecraftPod(namespace, deploymentName string) (*corev1.Pod, error) {
+	labelSelector := "app=" + deploymentName
+
+	podList, err := kubernetes.Clientset.CoreV1().Pods(namespace).List(context.Background(), metav1.ListOptions{
+		LabelSelector: labelSelector,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if len(podList.Items) == 0 {
+		return nil, nil // No pods found
+	}
+
+	return &podList.Items[0], nil
 }

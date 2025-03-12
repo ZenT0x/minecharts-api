@@ -22,38 +22,31 @@ func executeCommandInPod(podName, namespace, containerName, command string) (std
 		SubResource("exec")
 
 	execReq.VersionedParams(&corev1.PodExecOptions{
-		Command:   []string{"sh", "-c", command},
 		Container: containerName,
+		Command:   []string{"/bin/bash", "-c", command},
 		Stdout:    true,
 		Stderr:    true,
-		Stdin:     false,
-		TTY:       false,
 	}, scheme.ParameterCodec)
 
-	// Create executor
-	executor, err := remotecommand.NewSPDYExecutor(kubernetes.Config, "POST", execReq.URL())
+	// Create buffers to capture the command output.
+	var stdoutBuf, stderrBuf bytes.Buffer
+
+	// Execute the command in the pod.
+	exec, err := remotecommand.NewSPDYExecutor(kubernetes.Config, "POST", execReq.URL())
 	if err != nil {
 		return "", "", err
 	}
 
-	// Capture the command output
-	var stdoutBuf, stderrBuf bytes.Buffer
-	err = executor.StreamWithContext(context.Background(), remotecommand.StreamOptions{
+	// Set a timeout context for the command execution.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Stream the command output to our buffers.
+	err = exec.StreamWithContext(ctx, remotecommand.StreamOptions{
 		Stdout: &stdoutBuf,
 		Stderr: &stderrBuf,
-		Stdin:  nil,
 	})
 
+	// Return the command output even if there was an error.
 	return stdoutBuf.String(), stderrBuf.String(), err
-}
-
-// saveWorld sends a "save-all" command to the Minecraft server pod to save the world data.
-// This is a utility function to avoid code duplication across handlers.
-func saveWorld(podName, namespace string) (stdout, stderr string, err error) {
-	stdout, stderr, err = executeCommandInPod(podName, namespace, "minecraft-server", "mc-send-to-console save-all")
-	if err == nil {
-		// Wait for the save to complete
-		time.Sleep(10 * time.Second)
-	}
-	return stdout, stderr, err
 }
