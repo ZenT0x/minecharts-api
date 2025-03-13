@@ -2,15 +2,14 @@
 Minecharts is a Go API for managing Minecraft server pods on a Kubernetes cluster using Gin and client-go. It is containerized with Docker and includes Kubernetes manifests for easy deployment.
 
 ## Features
-    - RESTful API with Gin: Manage Minecraft server pods via a clean REST interface.
-    - Kubernetes Integration: Use client-go to interact with your Kubernetes cluster.
-    - Structured Git Workflow: Includes branches for stable releases, development, and features.
-    - Based on itzg/docker-minecraft-server: Leverages the well-maintained and feature-rich Minecraft server Docker image.
+    - Create and delete Minecraft server instances (pods)
+    - Start, stop, and restart Minecraft server instances
+    - Customize server instances with environment variables
+    - Execute commands in running Minecraft servers
+    - And more to come!
 
 ## Getting Started
 ### Prerequisites
-    - Go (v1.24+)
-    - Docker
     - A Kubernetes cluster (Minikube, Kind, or cloud provider)
 
 ### Installation
@@ -24,14 +23,9 @@ Go into the repository:
 cd minecharts
 ```
 
-Install dependencies:
+Apply the Kubernetes manifests:
 ```bash
-go mod tidy
-```
-
-Run the application:
-```bash
-        go run main.go
+kubectl apply -f kubernetes/
 ```
 
 ### Docker Image
@@ -51,12 +45,12 @@ This project uses the [itzg/docker-minecraft-server Docker](https://github.com/i
     - Version branches: For maintaining published versions (e.g., 1.4).
 
 # Roadmap
-    - [ ] Basic server management
+    - [x] Basic server management
         - [x] Create/delete Minecraft server instances (pods)
-        - [ ] Start/stop/restart Minecraft server instances
-    - [ ] Server customization
-        - [ ] Support majority of environment variables for Docker image customization
-        - [ ] Execute commands in running Minecraft servers
+        - [x] Start/stop/restart Minecraft server instances
+    - [x] Server customization
+        - [x] Support majority of environment variables for Docker image customization
+        - [x] Execute commands in running Minecraft servers
     - [ ] Networking options
         - [ ] ClusterIP + IngressRoute (Traefik specific Ingress controller support)
         - [ ] ClusterIP + Ingress (All Ingress controller support)
