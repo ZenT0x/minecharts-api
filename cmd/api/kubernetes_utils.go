@@ -77,6 +77,9 @@ func createDeployment(namespace, deploymentName, pvcName string, envVars []corev
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
+			Strategy: appsv1.DeploymentStrategy{
+				Type: appsv1.RecreateDeploymentStrategyType,
+			},
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					"app": deploymentName,
@@ -106,6 +109,16 @@ func createDeployment(namespace, deploymentName, pvcName string, envVars []corev
 									MountPath: "/data",
 								},
 							},
+							Lifecycle: &corev1.Lifecycle{
+								PreStop: &corev1.LifecycleHandler{
+									Exec: &corev1.ExecAction{
+										Command: []string{
+											"/bin/sh", "-c",
+											"mc-send-to-console save-all stop && sleep 5",
+										},
+									},
+								},
+							},
 						},
 					},
 					Volumes: []corev1.Volume{
@@ -127,7 +140,7 @@ func createDeployment(namespace, deploymentName, pvcName string, envVars []corev
 	return err
 }
 
-// restartDeployment restarts a deployment by updating an annotation
+// restartDeployment restarts a deployment by updating an annotation to trigger a rollout
 func restartDeployment(namespace, deploymentName string) error {
 	deployment, err := kubernetes.Clientset.AppsV1().Deployments(namespace).Get(context.Background(), deploymentName, metav1.GetOptions{})
 	if err != nil {
