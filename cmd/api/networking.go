@@ -96,7 +96,7 @@ func createIngressRoute(namespace, deploymentName, serviceName string, port int3
 	ingressRoute := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "traefik.io/v1alpha1",
-			"kind":       "IngressRouteTCP",
+			"kind":       "IngressRoute", // Changed from IngressRouteTCP to standard IngressRoute
 			"metadata": map[string]interface{}{
 				"name":      deploymentName + "-ingressroute",
 				"namespace": namespace,
@@ -106,10 +106,10 @@ func createIngressRoute(namespace, deploymentName, serviceName string, port int3
 				},
 			},
 			"spec": map[string]interface{}{
-				"entryPoints": []string{"minecraft"}, // This entrypoint must exist in Traefik config
+				"entryPoints": []string{"web"},
 				"routes": []map[string]interface{}{
 					{
-						"match": "HostSNI(`" + host + "`)",
+						"match": "Host(`" + host + "`)", // Using Host matcher instead of HostSNI
 						"kind":  "Rule",
 						"services": []map[string]interface{}{
 							{
@@ -123,11 +123,11 @@ func createIngressRoute(namespace, deploymentName, serviceName string, port int3
 		},
 	}
 
-	// Update the GVR to match the new API version
+	// Update the GVR to match the standard IngressRoute
 	ingressRouteGVR := schema.GroupVersionResource{
 		Group:    "traefik.io",
 		Version:  "v1alpha1",
-		Resource: "ingressroutetcps", // Use plural form for resource name
+		Resource: "ingressroutes", // Changed from ingressroutetcps to ingressroutes
 	}
 
 	// Get dynamic client for custom resources
@@ -167,7 +167,7 @@ func deleteIngressRoute(namespace, ingressRouteName string) error {
 	ingressRouteGVR := schema.GroupVersionResource{
 		Group:    "traefik.io",
 		Version:  "v1alpha1",
-		Resource: "ingressroutetcps",
+		Resource: "ingressroutes", // Changed from ingressroutetcps to ingressroutes
 	}
 
 	return dynamicClient.Resource(ingressRouteGVR).Namespace(namespace).Delete(
