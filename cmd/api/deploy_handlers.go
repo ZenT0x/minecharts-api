@@ -198,7 +198,6 @@ func StartStoppedServerHandler(c *gin.Context) {
 	})
 }
 
-// DeleteMinecraftServerHandler deletes the deployment and its associated PVC.
 func DeleteMinecraftServerHandler(c *gin.Context) {
 	deploymentName, pvcName := getServerInfo(c)
 
@@ -212,7 +211,17 @@ func DeleteMinecraftServerHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Deployment and PVC deleted", "deploymentName": deploymentName, "pvcName": pvcName})
+	// Clean up network resources
+	serviceName := deploymentName + "-svc"
+	_ = deleteService(DefaultNamespace, serviceName)
+	_ = deleteIngress(DefaultNamespace, deploymentName+"-ingress")
+	_ = deleteIngressRoute(DefaultNamespace, deploymentName+"-ingressroute")
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":        "Deployment, PVC and network resources deleted",
+		"deploymentName": deploymentName,
+		"pvcName":        pvcName,
+	})
 }
 
 // ExecCommandHandler executes a Minecraft command in the first pod of the deployment.

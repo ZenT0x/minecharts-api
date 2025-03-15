@@ -14,4 +14,7 @@ func SetupRoutes(router *gin.Engine) {
 	router.POST("/servers/:serverName/start", StartStoppedServerHandler)
 	router.POST("/servers/:serverName/delete", DeleteMinecraftServerHandler)
 	router.POST("/servers/:serverName/exec", ExecCommandHandler)
+
+	// Network exposure endpoint
+	router.POST("/servers/:serverName/expose", ExposeMinecraftServerHandler)
 }
