@@ -214,8 +214,6 @@ func DeleteMinecraftServerHandler(c *gin.Context) {
 	// Clean up network resources
 	serviceName := deploymentName + "-svc"
 	_ = deleteService(DefaultNamespace, serviceName)
-	_ = deleteIngress(DefaultNamespace, deploymentName+"-ingress")
-	_ = deleteIngressRoute(DefaultNamespace, deploymentName+"-ingressroute")
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":        "Deployment, PVC and network resources deleted",
