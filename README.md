@@ -51,11 +51,11 @@ This project uses the [itzg/docker-minecraft-server Docker](https://github.com/i
     - [x] Server customization
         - [x] Support majority of environment variables for Docker image customization
         - [x] Execute commands in running Minecraft servers
-    - [ ] Networking options
-        - [ ] ClusterIP + IngressRoute (Traefik specific Ingress controller support)
-        - [ ] ClusterIP + Ingress (All Ingress controller support)
-        - [ ] NodePort (Expose server port directly)
-        - [ ] LoadBalancer (Get Public IP for server)
+    - [x] Networking options
+        - [x] ClusterIP (Internal server)
+        - [x] NodePort (Expose server port directly)
+        - [x] LoadBalancer (Get Public IP for server)
+        - [x] MC Router
     - [ ] Extend API endpoints for full Minecraft server management
     - [ ] Develop a Kubernetes operator for automated resource handling
     - [ ] Implement CI/CD pipelines for testing and deployment
