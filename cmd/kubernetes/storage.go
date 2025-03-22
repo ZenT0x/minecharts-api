@@ -37,3 +37,8 @@ func EnsurePVC(namespace, pvcName string) error {
 	_, err = Clientset.CoreV1().PersistentVolumeClaims(namespace).Create(context.Background(), pvc, metav1.CreateOptions{})
 	return err
 }
+
+// deletePVC removes a PVC if it exists
+func DeletePVC(namespace, pvcName string) error {
+	return Clientset.CoreV1().PersistentVolumeClaims(namespace).Delete(context.Background(), pvcName, metav1.DeleteOptions{})
+}

@@ -208,11 +208,7 @@ func DeleteMinecraftServerHandler(c *gin.Context) {
 	_ = kubernetes.Clientset.AppsV1().Deployments(config.DeploymentPrefix).Delete(context.Background(), deploymentName, metav1.DeleteOptions{})
 
 	// Delete the PVC
-	err := kubernetes.Clientset.CoreV1().PersistentVolumeClaims(config.DeploymentPrefix).Delete(context.Background(), pvcName, metav1.DeleteOptions{})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete PVC: " + err.Error()})
-		return
-	}
+	_ = kubernetes.DeletePVC(config.DeploymentPrefix, pvcName)
 
 	// Clean up network resources
 	serviceName := deploymentName + "-svc"
