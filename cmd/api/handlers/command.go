@@ -122,13 +122,13 @@ func StopMinecraftServerHandler(c *gin.Context) {
 	deploymentName, _ := kubernetes.GetServerInfo(c)
 
 	// Check if the deployment exists
-	deployment, ok := kubernetes.CheckDeploymentExists(c, config.DeploymentPrefix, deploymentName)
+	_, ok := kubernetes.CheckDeploymentExists(c, config.DefaultNamespace, deploymentName)
 	if !ok {
 		return
 	}
 
 	// Get the pod associated with this deployment to run the save command
-	pod, err := kubernetes.GetMinecraftPod(config.DeploymentPrefix, deploymentName)
+	pod, err := kubernetes.GetMinecraftPod(config.DefaultNamespace, deploymentName)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to find pod for deployment: " + deploymentName,
@@ -138,7 +138,7 @@ func StopMinecraftServerHandler(c *gin.Context) {
 
 	if pod != nil {
 		// Save the world before scaling down
-		_, _, err := kubernetes.ExecuteCommandInPod(pod.Name, config.DeploymentPrefix, "minecraft-server", "mc-send-to-console save-all")
+		_, _, err := kubernetes.ExecuteCommandInPod(pod.Name, config.DefaultNamespace, "minecraft-server", "mc-send-to-console save-all")
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error":          "Failed to save world: " + err.Error(),
@@ -146,18 +146,10 @@ func StopMinecraftServerHandler(c *gin.Context) {
 			})
 			return
 		}
-
-		// Wait a moment for the save to complete
-		// time.Sleep(10 * time.Second)
 	}
 
 	// Scale deployment to 0
-	replicas := int32(0)
-	deployment.Spec.Replicas = &replicas
-	_, err = kubernetes.Clientset.AppsV1().Deployments(config.DeploymentPrefix).Update(
-		context.Background(), deployment, metav1.UpdateOptions{})
-
-	if err != nil {
+	if err := kubernetes.SetDeploymentReplicas(config.DefaultNamespace, deploymentName, 0); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":          "Failed to scale deployment: " + err.Error(),
 			"deploymentName": deploymentName,
@@ -176,18 +168,13 @@ func StartStoppedServerHandler(c *gin.Context) {
 	deploymentName, _ := kubernetes.GetServerInfo(c)
 
 	// Check if the deployment exists
-	deployment, ok := kubernetes.CheckDeploymentExists(c, config.DeploymentPrefix, deploymentName)
+	_, ok := kubernetes.CheckDeploymentExists(c, config.DefaultNamespace, deploymentName)
 	if !ok {
 		return
 	}
 
 	// Scale deployment to 1
-	replicas := int32(1)
-	deployment.Spec.Replicas = &replicas
-	_, err := kubernetes.Clientset.AppsV1().Deployments(config.DeploymentPrefix).Update(
-		context.Background(), deployment, metav1.UpdateOptions{})
-
-	if err != nil {
+	if err := kubernetes.SetDeploymentReplicas(config.DefaultNamespace, deploymentName, 1); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":          "Failed to start deployment: " + err.Error(),
 			"deploymentName": deploymentName,

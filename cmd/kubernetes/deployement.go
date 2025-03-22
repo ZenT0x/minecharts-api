@@ -136,3 +136,17 @@ func UpdateDeployment(namespace, deploymentName string, envVars []corev1.EnvVar)
 	_, err = Clientset.AppsV1().Deployments(namespace).Update(context.Background(), deployment, metav1.UpdateOptions{})
 	return err
 }
+
+// SetDeploymentReplicas updates the number of replicas for a deployment
+func SetDeploymentReplicas(namespace, deploymentName string, replicas int32) error {
+	deployment, err := Clientset.AppsV1().Deployments(namespace).Get(
+		context.Background(), deploymentName, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+
+	deployment.Spec.Replicas = &replicas
+	_, err = Clientset.AppsV1().Deployments(namespace).Update(
+		context.Background(), deployment, metav1.UpdateOptions{})
+	return err
+}
