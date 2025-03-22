@@ -56,6 +56,9 @@ This project uses the [itzg/docker-minecraft-server Docker](https://github.com/i
         - [x] NodePort (Expose server port directly)
         - [x] LoadBalancer (Get Public IP for server)
         - [x] MC Router
+    - [ ] User management
+        - [ ] User authentication
+        - [ ] User roles and permissions
     - [ ] Extend API endpoints for full Minecraft server management
     - [ ] Develop a Kubernetes operator for automated resource handling
     - [ ] Implement CI/CD pipelines for testing and deployment
