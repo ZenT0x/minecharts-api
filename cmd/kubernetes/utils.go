@@ -21,7 +21,7 @@ func GetServerInfo(c *gin.Context) (deploymentName, pvcName string) {
 
 // saveWorld sends a "save-all" command to the Minecraft server pod to save the world data.
 // This is a utility function to avoid code duplication across handlers.
-func saveWorld(podName, namespace string) (stdout, stderr string, err error) {
+func SaveWorld(podName, namespace string) (stdout, stderr string, err error) {
 	stdout, stderr, err = ExecuteCommandInPod(podName, namespace, "minecraft-server", "mc-send-to-console save-all")
 	if err == nil {
 		// Wait for the save to complete

@@ -83,7 +83,7 @@ func RestartMinecraftServerHandler(c *gin.Context) {
 	}
 
 	// Save the world
-	stdout, stderr, err := kubernetes.ExecuteCommandInPod(pod.Name, config.DeploymentPrefix, "minecraft-server", "mc-send-to-console save-all")
+	stdout, stderr, err := kubernetes.SaveWorld(pod.Name, config.DeploymentPrefix)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":          "Failed to save world: " + err.Error(),
