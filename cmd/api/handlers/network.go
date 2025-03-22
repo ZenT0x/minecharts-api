@@ -1,63 +1,24 @@
-package api
+package handlers
 
 import (
-	"context"
-	"minecharts/cmd/kubernetes"
 	"net/http"
 
+	"minecharts/cmd/config"
+	"minecharts/cmd/kubernetes"
+
 	"github.com/gin-gonic/gin"
+
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 )
-
-// createService creates a Kubernetes Service to expose a Minecraft server deployment
-func createService(namespace, deploymentName string, serviceType corev1.ServiceType, port int32, annotations map[string]string) (*corev1.Service, error) {
-	service := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: deploymentName + "-svc",
-			Labels: map[string]string{
-				"created-by": "minecharts-api",
-				"app":        deploymentName,
-			},
-			Annotations: annotations,
-		},
-		Spec: corev1.ServiceSpec{
-			Type: serviceType,
-			Ports: []corev1.ServicePort{
-				{
-					Name:       "minecraft",
-					Port:       port,
-					TargetPort: intstr.FromInt32(25565),
-					Protocol:   corev1.ProtocolTCP,
-				},
-			},
-			Selector: map[string]string{
-				"app": deploymentName,
-			},
-		},
-	}
-
-	return kubernetes.Clientset.CoreV1().Services(namespace).Create(context.Background(), service, metav1.CreateOptions{})
-}
-
-// getServiceDetails retrieves information about an existing service
-func getServiceDetails(namespace, serviceName string) (*corev1.Service, error) {
-	return kubernetes.Clientset.CoreV1().Services(namespace).Get(context.Background(), serviceName, metav1.GetOptions{})
-}
-
-// deleteService removes a service if it exists
-func deleteService(namespace, serviceName string) error {
-	return kubernetes.Clientset.CoreV1().Services(namespace).Delete(context.Background(), serviceName, metav1.DeleteOptions{})
-}
 
 // ExposeMinecraftServerHandler exposes a Minecraft server using the specified method
 func ExposeMinecraftServerHandler(c *gin.Context) {
 	// Get server info from URL parameter
-	deploymentName, _ := getServerInfo(c)
+	serverName := c.Param("serverName")
+	deploymentName := config.DeploymentPrefix + serverName
 
 	// Check if the deployment exists
-	_, ok := checkDeploymentExists(c, DefaultNamespace, deploymentName)
+	_, ok := kubernetes.CheckDeploymentExists(c, config.DefaultNamespace, deploymentName)
 	if !ok {
 		return
 	}
@@ -103,7 +64,7 @@ func ExposeMinecraftServerHandler(c *gin.Context) {
 
 	// Clean up any existing services for this deployment
 	// Ignore errors in case the resources don't exist yet
-	_ = deleteService(DefaultNamespace, serviceName)
+	_ = kubernetes.DeleteService(config.DefaultNamespace, serviceName)
 
 	// Create appropriate service based on exposure type
 	var serviceType corev1.ServiceType
@@ -122,7 +83,7 @@ func ExposeMinecraftServerHandler(c *gin.Context) {
 	}
 
 	// Create the service
-	service, err := createService(DefaultNamespace, deploymentName, serviceType, req.Port, annotations)
+	service, err := kubernetes.CreateService(config.DefaultNamespace, deploymentName, serviceType, req.Port, annotations)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to create service: " + err.Error(),

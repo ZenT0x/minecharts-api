@@ -1,11 +1,14 @@
-package api
+package handlers
 
 import (
 	"context"
-	"minecharts/cmd/kubernetes"
 	"net/http"
 
+	"minecharts/cmd/config"
+	"minecharts/cmd/kubernetes"
+
 	"github.com/gin-gonic/gin"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -23,11 +26,11 @@ func StartMinecraftServerHandler(c *gin.Context) {
 	}
 
 	baseName := req.ServerName
-	deploymentName := DeploymentPrefix + baseName
-	pvcName := deploymentName + PVCSuffix
+	deploymentName := config.DeploymentPrefix + baseName
+	pvcName := deploymentName + config.PVCSuffix
 
 	// Creates the PVC if it doesn't already exist.
-	if err := ensurePVC(DefaultNamespace, pvcName); err != nil {
+	if err := kubernetes.EnsurePVC(config.DeploymentPrefix, pvcName); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to ensure PVC: " + err.Error()})
 		return
 	}
@@ -52,7 +55,7 @@ func StartMinecraftServerHandler(c *gin.Context) {
 	}
 
 	// Creates the deployment with the existing PVC (created if necessary).
-	if err := createDeployment(DefaultNamespace, deploymentName, pvcName, envVars); err != nil {
+	if err := kubernetes.CreateDeployment(config.DeploymentPrefix, deploymentName, pvcName, envVars); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create deployment: " + err.Error()})
 		return
 	}
@@ -62,16 +65,16 @@ func StartMinecraftServerHandler(c *gin.Context) {
 
 // RestartMinecraftServerHandler saves the world and then restarts the deployment.
 func RestartMinecraftServerHandler(c *gin.Context) {
-	deploymentName, _ := getServerInfo(c)
+	deploymentName, _ := kubernetes.GetServerInfo(c)
 
 	// Check if the deployment exists
-	_, ok := checkDeploymentExists(c, DefaultNamespace, deploymentName)
+	_, ok := kubernetes.CheckDeploymentExists(c, config.DeploymentPrefix, deploymentName)
 	if !ok {
 		return
 	}
 
 	// Get the pod associated with this deployment to run the save command
-	pod, err := getMinecraftPod(DefaultNamespace, deploymentName)
+	pod, err := kubernetes.GetMinecraftPod(config.DeploymentPrefix, deploymentName)
 	if err != nil || pod == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to find pod for deployment: " + deploymentName,
@@ -80,7 +83,7 @@ func RestartMinecraftServerHandler(c *gin.Context) {
 	}
 
 	// Save the world
-	stdout, stderr, err := executeCommandInPod(pod.Name, DefaultNamespace, "minecraft-server", "mc-send-to-console save-all")
+	stdout, stderr, err := kubernetes.ExecuteCommandInPod(pod.Name, config.DeploymentPrefix, "minecraft-server", "mc-send-to-console save-all")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":          "Failed to save world: " + err.Error(),
@@ -93,7 +96,7 @@ func RestartMinecraftServerHandler(c *gin.Context) {
 	// time.Sleep(10 * time.Second)
 
 	// Restart the deployment
-	if err := restartDeployment(DefaultNamespace, deploymentName); err != nil {
+	if err := kubernetes.RestartDeployment(config.DeploymentPrefix, deploymentName); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":          "Failed to restart deployment: " + err.Error(),
 			"deploymentName": deploymentName,
@@ -116,16 +119,16 @@ func RestartMinecraftServerHandler(c *gin.Context) {
 
 // StopMinecraftServerHandler scales the deployment to 0 replicas.
 func StopMinecraftServerHandler(c *gin.Context) {
-	deploymentName, _ := getServerInfo(c)
+	deploymentName, _ := kubernetes.GetServerInfo(c)
 
 	// Check if the deployment exists
-	deployment, ok := checkDeploymentExists(c, DefaultNamespace, deploymentName)
+	deployment, ok := kubernetes.CheckDeploymentExists(c, config.DeploymentPrefix, deploymentName)
 	if !ok {
 		return
 	}
 
 	// Get the pod associated with this deployment to run the save command
-	pod, err := getMinecraftPod(DefaultNamespace, deploymentName)
+	pod, err := kubernetes.GetMinecraftPod(config.DeploymentPrefix, deploymentName)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to find pod for deployment: " + deploymentName,
@@ -135,7 +138,7 @@ func StopMinecraftServerHandler(c *gin.Context) {
 
 	if pod != nil {
 		// Save the world before scaling down
-		_, _, err := executeCommandInPod(pod.Name, DefaultNamespace, "minecraft-server", "mc-send-to-console save-all")
+		_, _, err := kubernetes.ExecuteCommandInPod(pod.Name, config.DeploymentPrefix, "minecraft-server", "mc-send-to-console save-all")
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error":          "Failed to save world: " + err.Error(),
@@ -151,7 +154,7 @@ func StopMinecraftServerHandler(c *gin.Context) {
 	// Scale deployment to 0
 	replicas := int32(0)
 	deployment.Spec.Replicas = &replicas
-	_, err = kubernetes.Clientset.AppsV1().Deployments(DefaultNamespace).Update(
+	_, err = kubernetes.Clientset.AppsV1().Deployments(config.DeploymentPrefix).Update(
 		context.Background(), deployment, metav1.UpdateOptions{})
 
 	if err != nil {
@@ -170,10 +173,10 @@ func StopMinecraftServerHandler(c *gin.Context) {
 
 // StartStoppedServerHandler scales a stopped deployment back to 1 replica.
 func StartStoppedServerHandler(c *gin.Context) {
-	deploymentName, _ := getServerInfo(c)
+	deploymentName, _ := kubernetes.GetServerInfo(c)
 
 	// Check if the deployment exists
-	deployment, ok := checkDeploymentExists(c, DefaultNamespace, deploymentName)
+	deployment, ok := kubernetes.CheckDeploymentExists(c, config.DeploymentPrefix, deploymentName)
 	if !ok {
 		return
 	}
@@ -181,7 +184,7 @@ func StartStoppedServerHandler(c *gin.Context) {
 	// Scale deployment to 1
 	replicas := int32(1)
 	deployment.Spec.Replicas = &replicas
-	_, err := kubernetes.Clientset.AppsV1().Deployments(DefaultNamespace).Update(
+	_, err := kubernetes.Clientset.AppsV1().Deployments(config.DeploymentPrefix).Update(
 		context.Background(), deployment, metav1.UpdateOptions{})
 
 	if err != nil {
@@ -199,13 +202,13 @@ func StartStoppedServerHandler(c *gin.Context) {
 }
 
 func DeleteMinecraftServerHandler(c *gin.Context) {
-	deploymentName, pvcName := getServerInfo(c)
+	deploymentName, pvcName := kubernetes.GetServerInfo(c)
 
 	// Delete the deployment if it exists
-	_ = kubernetes.Clientset.AppsV1().Deployments(DefaultNamespace).Delete(context.Background(), deploymentName, metav1.DeleteOptions{})
+	_ = kubernetes.Clientset.AppsV1().Deployments(config.DeploymentPrefix).Delete(context.Background(), deploymentName, metav1.DeleteOptions{})
 
 	// Delete the PVC
-	err := kubernetes.Clientset.CoreV1().PersistentVolumeClaims(DefaultNamespace).Delete(context.Background(), pvcName, metav1.DeleteOptions{})
+	err := kubernetes.Clientset.CoreV1().PersistentVolumeClaims(config.DeploymentPrefix).Delete(context.Background(), pvcName, metav1.DeleteOptions{})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete PVC: " + err.Error()})
 		return
@@ -213,7 +216,7 @@ func DeleteMinecraftServerHandler(c *gin.Context) {
 
 	// Clean up network resources
 	serviceName := deploymentName + "-svc"
-	_ = deleteService(DefaultNamespace, serviceName)
+	_ = kubernetes.DeleteService(config.DeploymentPrefix, serviceName)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":        "Deployment, PVC and network resources deleted",
@@ -224,16 +227,18 @@ func DeleteMinecraftServerHandler(c *gin.Context) {
 
 // ExecCommandHandler executes a Minecraft command in the first pod of the deployment.
 func ExecCommandHandler(c *gin.Context) {
-	deploymentName, _ := getServerInfo(c)
+	// Extract the server name from the URL parameter
+	serverName := c.Param("serverName")
+	deploymentName := config.DeploymentPrefix + serverName
 
 	// Check if the deployment exists
-	_, ok := checkDeploymentExists(c, DefaultNamespace, deploymentName)
+	_, ok := kubernetes.CheckDeploymentExists(c, config.DeploymentPrefix, deploymentName)
 	if !ok {
 		return
 	}
 
 	// Get the pod associated with this deployment
-	pod, err := getMinecraftPod(DefaultNamespace, deploymentName)
+	pod, err := kubernetes.GetMinecraftPod(config.DeploymentPrefix, deploymentName)
 	if err != nil || pod == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to find running pod for deployment: " + deploymentName,
@@ -254,7 +259,7 @@ func ExecCommandHandler(c *gin.Context) {
 	execCommand := "mc-send-to-console " + req.Command
 
 	// Execute the command in the pod
-	stdout, stderr, err := executeCommandInPod(pod.Name, DefaultNamespace, "minecraft-server", execCommand)
+	stdout, stderr, err := kubernetes.ExecuteCommandInPod(pod.Name, config.DeploymentPrefix, "minecraft-server", execCommand)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":   "Failed to execute command: " + err.Error(),

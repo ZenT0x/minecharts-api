@@ -1,21 +1,40 @@
-package api
+package kubernetes
 
 import (
 	"bytes"
 	"context"
-	"minecharts/cmd/kubernetes"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/remotecommand"
 )
 
+// getMinecraftPod gets the first pod associated with a deployment
+func GetMinecraftPod(namespace, deploymentName string) (*corev1.Pod, error) {
+	labelSelector := "app=" + deploymentName
+
+	podList, err := Clientset.CoreV1().Pods(namespace).List(context.Background(), metav1.ListOptions{
+		LabelSelector: labelSelector,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if len(podList.Items) == 0 {
+		return nil, nil // No pods found
+	}
+
+	return &podList.Items[0], nil
+}
+
 // executeCommandInPod executes a command in the specified pod and returns the output.
 // This is a utility function to avoid code duplication across handlers.
-func executeCommandInPod(podName, namespace, containerName, command string) (stdout, stderr string, err error) {
+func ExecuteCommandInPod(podName, namespace, containerName, command string) (stdout, stderr string, err error) {
 	// Prepare the execution request in the pod.
-	execReq := kubernetes.Clientset.CoreV1().RESTClient().Post().
+	execReq := Clientset.CoreV1().RESTClient().Post().
 		Resource("pods").
 		Name(podName).
 		Namespace(namespace).
@@ -32,7 +51,7 @@ func executeCommandInPod(podName, namespace, containerName, command string) (std
 	var stdoutBuf, stderrBuf bytes.Buffer
 
 	// Execute the command in the pod.
-	exec, err := remotecommand.NewSPDYExecutor(kubernetes.Config, "POST", execReq.URL())
+	exec, err := remotecommand.NewSPDYExecutor(Config, "POST", execReq.URL())
 	if err != nil {
 		return "", "", err
 	}
@@ -49,15 +68,4 @@ func executeCommandInPod(podName, namespace, containerName, command string) (std
 
 	// Return the command output even if there was an error.
 	return stdoutBuf.String(), stderrBuf.String(), err
-}
-
-// saveWorld sends a "save-all" command to the Minecraft server pod to save the world data.
-// This is a utility function to avoid code duplication across handlers.
-func saveWorld(podName, namespace string) (stdout, stderr string, err error) {
-	stdout, stderr, err = executeCommandInPod(podName, namespace, "minecraft-server", "mc-send-to-console save-all")
-	if err == nil {
-		// Wait for the save to complete
-		time.Sleep(10 * time.Second)
-	}
-	return stdout, stderr, err
 }
