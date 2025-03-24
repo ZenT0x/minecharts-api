@@ -10,8 +10,10 @@ COPY . .
 RUN --mount=type=cache,target=/root/.cache/go-build go build -ldflags="-s -w" -o build/minecharts ./cmd
 
 # Stage 2: Create the minimal image using scratch
-FROM scratch
+FROM alpine:latest
 WORKDIR /app
+
+RUN mkdir -p /app/data && chmod 777 /app/data
 
 COPY --from=builder /app/build/minecharts .
 
