@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"net/http"
 
 	"minecharts/cmd/config"
@@ -10,7 +9,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // StartMinecraftServerHandler creates the PVC (if it doesn't exist) and starts the Minecraft deployment.
@@ -192,7 +190,7 @@ func DeleteMinecraftServerHandler(c *gin.Context) {
 	deploymentName, pvcName := kubernetes.GetServerInfo(c)
 
 	// Delete the deployment if it exists
-	_ = kubernetes.Clientset.AppsV1().Deployments(config.DeploymentPrefix).Delete(context.Background(), deploymentName, metav1.DeleteOptions{})
+	_ = kubernetes.DeleteDeployment(config.DeploymentPrefix, deploymentName)
 
 	// Delete the PVC
 	_ = kubernetes.DeletePVC(config.DeploymentPrefix, pvcName)
