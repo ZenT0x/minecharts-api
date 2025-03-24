@@ -82,7 +82,7 @@ func GetDB() DB {
 		// Default to SQLite with a file in the data directory
 		dataDir := os.Getenv("DATA_DIR")
 		if dataDir == "" {
-			dataDir = "./data"
+			dataDir = "./app/data"
 		}
 
 		// Create data directory if it doesn't exist

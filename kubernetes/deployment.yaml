@@ -24,12 +24,12 @@ spec:
             - name: MINECHARTS_DB_TYPE
               value: "sqlite"
             - name: MINECHARTS_DB_CONNECTION
-              value: "/data/minecharts.db"
+              value: "/app/data/minecharts.db"
             - name: DATA_DIR
-              value: "/data"
+              value: "/app/data"
           volumeMounts:
             - name: data-volume
-              mountPath: /data
+              mountPath: /app/data
           resources:
             requests:
               memory: "128Mi"

@@ -16,8 +16,8 @@ var (
 	DefaultReplicas  = 1
 
 	// Database configuration
-	DatabaseType             = getEnv("MINECHARTS_DB_TYPE", "sqlite")                     // "sqlite" or "postgres"
-	DatabaseConnectionString = getEnv("MINECHARTS_DB_CONNECTION", "./data/minecharts.db") // File path for SQLite or connection string for Postgres
+	DatabaseType             = getEnv("MINECHARTS_DB_TYPE", "sqlite")                         // "sqlite" or "postgres"
+	DatabaseConnectionString = getEnv("MINECHARTS_DB_CONNECTION", "./app/data/minecharts.db") // File path for SQLite or connection string for Postgres
 
 	// Authentication configuration
 	JWTSecret      = getEnv("MINECHARTS_JWT_SECRET", "your-secret-key-change-me-in-production")
