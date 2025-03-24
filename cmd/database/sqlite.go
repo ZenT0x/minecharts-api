@@ -15,7 +15,7 @@ type SQLiteDB struct {
 
 // NewSQLiteDB creates a new SQLite database connection
 func NewSQLiteDB(path string) (*SQLiteDB, error) {
-	db, err := sql.Open("sqlite3", path)
+	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, err
 	}
