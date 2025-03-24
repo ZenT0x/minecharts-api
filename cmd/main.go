@@ -4,6 +4,8 @@ import (
 	"log"
 
 	"minecharts/cmd/api"
+	"minecharts/cmd/config"
+	"minecharts/cmd/database"
 	"minecharts/cmd/kubernetes"
 
 	"github.com/gin-gonic/gin"
@@ -14,6 +16,12 @@ func main() {
 	if err := kubernetes.Init(); err != nil {
 		log.Fatalf("Failed to initialize Kubernetes client: %v", err)
 	}
+
+	// Initialize the database
+	if err := database.InitDB(config.DatabaseType, config.DatabaseConnectionString); err != nil {
+		log.Fatalf("Failed to initialize database: %v", err)
+	}
+	defer database.GetDB().Close()
 
 	// Create a new Gin router.
 	router := gin.Default()
