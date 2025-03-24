@@ -38,12 +38,12 @@ func CreateService(namespace, deploymentName string, serviceType corev1.ServiceT
 	return Clientset.CoreV1().Services(namespace).Create(context.Background(), service, metav1.CreateOptions{})
 }
 
-// getServiceDetails retrieves information about an existing service
-func GetServiceDetails(namespace, serviceName string) (*corev1.Service, error) {
-	return Clientset.CoreV1().Services(namespace).Get(context.Background(), serviceName, metav1.GetOptions{})
-}
-
 // deleteService removes a service if it exists
 func DeleteService(namespace, serviceName string) error {
 	return Clientset.CoreV1().Services(namespace).Delete(context.Background(), serviceName, metav1.DeleteOptions{})
+}
+
+// getServiceDetails retrieves information about an existing service
+func GetServiceDetails(namespace, serviceName string) (*corev1.Service, error) {
+	return Clientset.CoreV1().Services(namespace).Get(context.Background(), serviceName, metav1.GetOptions{})
 }
