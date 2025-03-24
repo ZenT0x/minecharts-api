@@ -20,3 +20,24 @@ spec:
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
+          env:
+            - name: MINECHARTS_DB_TYPE
+              value: "sqlite"
+            - name: MINECHARTS_DB_CONNECTION
+              value: "/data/minecharts.db"
+            - name: DATA_DIR
+              value: "/data"
+          volumeMounts:
+            - name: data-volume
+              mountPath: /data
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+      volumes:
+        - name: data-volume
+          persistentVolumeClaim:
+            claimName: minecharts-data-pvc
