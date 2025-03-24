@@ -137,6 +137,11 @@ func UpdateDeployment(namespace, deploymentName string, envVars []corev1.EnvVar)
 	return err
 }
 
+// DeleteDeployment deletes a deployment
+func DeleteDeployment(namespace, deploymentName string) error {
+	return Clientset.AppsV1().Deployments(namespace).Delete(context.Background(), deploymentName, metav1.DeleteOptions{})
+}
+
 // SetDeploymentReplicas updates the number of replicas for a deployment
 func SetDeploymentReplicas(namespace, deploymentName string, replicas int32) error {
 	deployment, err := Clientset.AppsV1().Deployments(namespace).Get(
