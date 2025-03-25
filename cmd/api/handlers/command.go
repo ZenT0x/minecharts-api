@@ -231,6 +231,8 @@ func ExecCommandHandler(c *gin.Context) {
 	var req struct {
 		Command string `json:"command"`
 	}
+	//TODO Validate the command
+
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
