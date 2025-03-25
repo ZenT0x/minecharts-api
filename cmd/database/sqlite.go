@@ -75,7 +75,7 @@ func (s *SQLiteDB) Init() error {
 			"INSERT INTO users (username, email, password_hash, permissions, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
 			"admin",
 			"admin@example.com",
-			"$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy", // password: admin
+			"$2a$10$lCLlDMorzUH3R9pwSehyau1DISGeEdL21xpSzy7mjFwQ.CYYnydrW", // password: admin
 			PermAll,
 			true,
 			now,
