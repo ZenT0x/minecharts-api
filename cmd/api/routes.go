@@ -1,3 +1,4 @@
+// Package api provides routing and API endpoints for the application.
 package api
 
 import (
@@ -8,7 +9,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// SetupRoutes registers the API routes.
+// SetupRoutes registers all the API routes with their respective handlers.
+// It defines the authentication middleware, permissions, and path grouping.
 func SetupRoutes(router *gin.Engine) {
 	// Ping endpoint for health checks
 	router.GET("/ping", handlers.PingHandler)

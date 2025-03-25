@@ -1,3 +1,7 @@
+// Package auth provides authentication and authorization capabilities.
+//
+// This package handles JWT token generation and validation, API key authentication,
+// password hashing and verification, and OAuth provider integration.
 package auth
 
 import (
@@ -10,11 +14,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// AuthUserKey is the key used to store authenticated user in the Gin context.
 const (
 	AuthUserKey = "auth_user"
 )
 
-// JWTMiddleware validates JWT tokens in the Authorization header
+// JWTMiddleware validates JWT tokens in the Authorization header.
+// It extracts the token from the Authorization header, validates it,
+// and sets the authenticated user in the Gin context for downstream handlers.
 func JWTMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Get Authorization header
@@ -63,7 +70,8 @@ func JWTMiddleware() gin.HandlerFunc {
 	}
 }
 
-// APIKeyMiddleware validates API key in the X-API-Key header
+// APIKeyMiddleware validates API key in the X-API-Key header.
+// It attempts API key authentication if JWT authentication hasn't already succeeded.
 func APIKeyMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Skip if JWT already authenticated
@@ -113,7 +121,8 @@ func APIKeyMiddleware() gin.HandlerFunc {
 	}
 }
 
-// RequirePermission checks if the authenticated user has the required permission
+// RequirePermission checks if the authenticated user has the required permission.
+// It returns a 403 Forbidden response if the user doesn't have the required permission.
 func RequirePermission(permission int64) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Get user from context
@@ -139,7 +148,8 @@ func RequirePermission(permission int64) gin.HandlerFunc {
 	}
 }
 
-// GetCurrentUser retrieves the authenticated user from the Gin context
+// GetCurrentUser retrieves the authenticated user from the Gin context.
+// It returns the user object and a boolean indicating if the user was found.
 func GetCurrentUser(c *gin.Context) (*database.User, bool) {
 	value, exists := c.Get(AuthUserKey)
 	if !exists {

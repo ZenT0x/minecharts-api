@@ -1,36 +1,40 @@
+// Package database provides database access and models for the application.
+//
+// This package defines database interfaces, models, and implementations for
+// various database backends like SQLite and PostgreSQL.
 package database
 
 import (
 	"time"
 )
 
-// Permission flags
+// Permission flags define the bit flags for user permissions.
 const (
-	PermAdmin         = 1 << iota // 1: Full administrator access
-	PermCreateServer              // 2: Can create new servers
-	PermDeleteServer              // 4: Can delete servers
-	PermStartServer               // 8: Can start servers
-	PermStopServer                // 16: Can stop servers
-	PermRestartServer             // 32: Can restart servers
-	PermExecCommand               // 64: Can execute commands on servers
-	PermViewServer                // 128: Can view server details
+	PermAdmin         = 1 << iota // Full administrator access
+	PermCreateServer              // Can create new servers
+	PermDeleteServer              // Can delete servers
+	PermStartServer               // Can start servers
+	PermStopServer                // Can stop servers
+	PermRestartServer             // Can restart servers
+	PermExecCommand               // Can execute commands on servers
+	PermViewServer                // Can view server details
 )
 
-// Common permissions groups
+// Common permissions groups provide pre-defined combinations of permissions.
 var (
-	// All permissions
+	// PermAll grants all permissions
 	PermAll = PermAdmin | PermCreateServer | PermDeleteServer | PermStartServer |
 		PermStopServer | PermRestartServer | PermExecCommand | PermViewServer
 
-	// Read-only permissions
+	// PermReadOnly grants only view permissions
 	PermReadOnly = PermViewServer
 
-	// Operator permissions (everything except admin)
+	// PermOperator grants everything except admin permissions
 	PermOperator = PermCreateServer | PermDeleteServer | PermStartServer |
 		PermStopServer | PermRestartServer | PermExecCommand | PermViewServer
 )
 
-// User represents a user in the system
+// User represents a user in the system with their permissions and account details.
 type User struct {
 	ID           int64      `json:"id"`
 	Username     string     `json:"username"`
@@ -43,7 +47,8 @@ type User struct {
 	UpdatedAt    time.Time  `json:"updated_at"`
 }
 
-// HasPermission checks if the user has the specified permission
+// HasPermission checks if the user has the specified permission.
+// It always returns true for administrators.
 func (u *User) HasPermission(permission int64) bool {
 	// Admin always has all permissions
 	if u.Permissions&PermAdmin != 0 {
@@ -52,12 +57,12 @@ func (u *User) HasPermission(permission int64) bool {
 	return u.Permissions&permission != 0
 }
 
-// IsAdmin checks if the user is an administrator
+// IsAdmin checks if the user is an administrator.
 func (u *User) IsAdmin() bool {
 	return u.HasPermission(PermAdmin)
 }
 
-// APIKey represents an API key for machine authentication
+// APIKey represents an API key for machine authentication.
 type APIKey struct {
 	ID          int64     `json:"id"`
 	UserID      int64     `json:"user_id"`

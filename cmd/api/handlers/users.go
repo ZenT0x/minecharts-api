@@ -10,7 +10,28 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// ListUsersHandler returns a list of all users (admin only)
+// UpdateUserRequest represents a request to update user information.
+// All fields are optional to allow partial updates.
+type UpdateUserRequest struct {
+	Username    *string `json:"username" example:"newusername"`
+	Email       *string `json:"email" example:"new@example.com"`
+	Password    *string `json:"password" example:"newStrongPassword123"`
+	Permissions *int64  `json:"permissions" example:"143"` // Bit flags for permissions
+	Active      *bool   `json:"active" example:"true"`
+}
+
+// ListUsersHandler returns a list of all users (admin only).
+//
+// @Summary      List all users
+// @Description  Returns a list of all users in the system (admin only)
+// @Tags         users
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {array}   map[string]interface{}  "List of users"
+// @Failure      401  {object}  map[string]string       "Authentication required"
+// @Failure      403  {object}  map[string]string       "Permission denied"
+// @Failure      500  {object}  map[string]string       "Server error"
+// @Router       /users [get]
 func ListUsersHandler(c *gin.Context) {
 	db := database.GetDB()
 	users, err := db.ListUsers(c.Request.Context())
@@ -37,7 +58,21 @@ func ListUsersHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
-// GetUserHandler returns details for a specific user
+// GetUserHandler returns details for a specific user.
+//
+// @Summary      Get user details
+// @Description  Returns detailed information about a specific user
+// @Tags         users
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      integer  true  "User ID"
+// @Success      200  {object}  map[string]interface{}  "User details"
+// @Failure      400  {object}  map[string]string       "Invalid user ID"
+// @Failure      401  {object}  map[string]string       "Authentication required"
+// @Failure      403  {object}  map[string]string       "Permission denied"
+// @Failure      404  {object}  map[string]string       "User not found"
+// @Failure      500  {object}  map[string]string       "Server error"
+// @Router       /users/{id} [get]
 func GetUserHandler(c *gin.Context) {
 	// Get current user
 	currentUser, ok := auth.GetCurrentUser(c)
@@ -84,16 +119,23 @@ func GetUserHandler(c *gin.Context) {
 	})
 }
 
-// UpdateUserRequest represents a request to update a user
-type UpdateUserRequest struct {
-	Username    *string `json:"username"`
-	Email       *string `json:"email"`
-	Password    *string `json:"password"`
-	Permissions *int64  `json:"permissions"`
-	Active      *bool   `json:"active"`
-}
-
-// UpdateUserHandler updates a user's information
+// UpdateUserHandler updates a user's information.
+//
+// @Summary      Update user
+// @Description  Updates information for an existing user
+// @Tags         users
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id       path      integer           true  "User ID"
+// @Param        request  body      UpdateUserRequest  true  "User information to update"
+// @Success      200      {object}  map[string]interface{}  "Updated user details"
+// @Failure      400      {object}  map[string]string       "Invalid request"
+// @Failure      401      {object}  map[string]string       "Authentication required"
+// @Failure      403      {object}  map[string]string       "Permission denied"
+// @Failure      404      {object}  map[string]string       "User not found"
+// @Failure      500      {object}  map[string]string       "Server error"
+// @Router       /users/{id} [put]
 func UpdateUserHandler(c *gin.Context) {
 	// Get current user
 	currentUser, ok := auth.GetCurrentUser(c)
@@ -197,7 +239,21 @@ func UpdateUserHandler(c *gin.Context) {
 	})
 }
 
-// DeleteUserHandler deletes a user (admin only)
+// DeleteUserHandler deletes a user (admin only).
+//
+// @Summary      Delete user
+// @Description  Deletes a user from the system
+// @Tags         users
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      integer  true  "User ID"
+// @Success      200  {object}  map[string]string  "User deleted successfully"
+// @Failure      400  {object}  map[string]string  "Invalid user ID"
+// @Failure      401  {object}  map[string]string  "Authentication required"
+// @Failure      403  {object}  map[string]string  "Permission denied"
+// @Failure      404  {object}  map[string]string  "User not found"
+// @Failure      500  {object}  map[string]string  "Server error"
+// @Router       /users/{id} [delete]
 func DeleteUserHandler(c *gin.Context) {
 	// Get user ID from URL parameter
 	idStr := c.Param("id")

@@ -1,3 +1,7 @@
+// Package kubernetes provides functionality for managing Kubernetes resources.
+//
+// This package handles the creation, management and deletion of Kubernetes resources
+// like deployments, services, pods and persistent volume claims for Minecraft servers.
 package kubernetes
 
 import (
@@ -13,7 +17,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// checkDeploymentExists checks if a deployment exists and returns an HTTP error if it does not
+// CheckDeploymentExists checks if a deployment exists and returns an HTTP error if it does not.
+// Returns the deployment and a boolean indicating whether it exists.
 func CheckDeploymentExists(c *gin.Context, namespace, deploymentName string) (*appsv1.Deployment, bool) {
 	deployment, err := Clientset.AppsV1().Deployments(namespace).Get(context.Background(), deploymentName, metav1.GetOptions{})
 	if err != nil {
@@ -23,7 +28,8 @@ func CheckDeploymentExists(c *gin.Context, namespace, deploymentName string) (*a
 	return deployment, true
 }
 
-// createDeployment creates a Minecraft deployment using the specified PVC, with the provided environment variables.
+// CreateDeployment creates a Minecraft deployment using the specified PVC and environment variables.
+// It configures the deployment with appropriate lifecycle hooks and volume mounts.
 func CreateDeployment(namespace, deploymentName, pvcName string, envVars []corev1.EnvVar) error {
 	replicas := int32(config.DefaultReplicas)
 
@@ -100,7 +106,8 @@ func CreateDeployment(namespace, deploymentName, pvcName string, envVars []corev
 	return err
 }
 
-// restartDeployment restarts a deployment by updating an annotation to trigger a rollout
+// RestartDeployment restarts a deployment by updating an annotation to trigger a rollout.
+// This is a non-disruptive way to restart pods in a deployment.
 func RestartDeployment(namespace, deploymentName string) error {
 	deployment, err := Clientset.AppsV1().Deployments(namespace).Get(context.Background(), deploymentName, metav1.GetOptions{})
 	if err != nil {
@@ -118,7 +125,8 @@ func RestartDeployment(namespace, deploymentName string) error {
 	return err
 }
 
-// UpdateDeployment updates a deployment with new environment variables
+// UpdateDeployment updates a deployment with new environment variables.
+// This allows reconfiguring a Minecraft server without restarting it.
 func UpdateDeployment(namespace, deploymentName string, envVars []corev1.EnvVar) error {
 	deployment, err := Clientset.AppsV1().Deployments(namespace).Get(context.Background(), deploymentName, metav1.GetOptions{})
 	if err != nil {
@@ -137,12 +145,13 @@ func UpdateDeployment(namespace, deploymentName string, envVars []corev1.EnvVar)
 	return err
 }
 
-// DeleteDeployment deletes a deployment
+// DeleteDeployment deletes a deployment by name.
 func DeleteDeployment(namespace, deploymentName string) error {
 	return Clientset.AppsV1().Deployments(namespace).Delete(context.Background(), deploymentName, metav1.DeleteOptions{})
 }
 
-// SetDeploymentReplicas updates the number of replicas for a deployment
+// SetDeploymentReplicas updates the number of replicas for a deployment.
+// This is used to scale up (start) or down (stop) Minecraft servers.
 func SetDeploymentReplicas(namespace, deploymentName string, replicas int32) error {
 	deployment, err := Clientset.AppsV1().Deployments(namespace).Get(
 		context.Background(), deploymentName, metav1.GetOptions{})

@@ -11,7 +11,31 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// ExposeMinecraftServerHandler exposes a Minecraft server using the specified method
+// ExposeServerRequest represents the request to expose a Minecraft server.
+type ExposeServerRequest struct {
+	ExposureType string `json:"exposureType" binding:"required" example:"NodePort"`
+	Domain       string `json:"domain" example:"mc.example.com"`
+	Port         int32  `json:"port" example:"25565"`
+}
+
+// ExposeMinecraftServerHandler exposes a Minecraft server using the specified method.
+//
+// @Summary      Expose Minecraft server
+// @Description  Creates a Kubernetes service to expose the Minecraft server
+// @Tags         servers
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Security     APIKeyAuth
+// @Param        serverName  path      string              true  "Server name"
+// @Param        request     body      ExposeServerRequest  true  "Exposure configuration"
+// @Success      200         {object}  map[string]interface{}  "Service created"
+// @Failure      400         {object}  map[string]string       "Invalid request"
+// @Failure      401         {object}  map[string]string       "Authentication required"
+// @Failure      403         {object}  map[string]string       "Permission denied"
+// @Failure      404         {object}  map[string]string       "Server not found"
+// @Failure      500         {object}  map[string]string       "Server error"
+// @Router       /servers/{serverName}/expose [post]
 func ExposeMinecraftServerHandler(c *gin.Context) {
 	// Get server info from URL parameter
 	serverName := c.Param("serverName")
@@ -24,11 +48,7 @@ func ExposeMinecraftServerHandler(c *gin.Context) {
 	}
 
 	// Parse request body
-	var req struct {
-		ExposureType string `json:"exposureType" binding:"required"`
-		Domain       string `json:"domain"`
-		Port         int32  `json:"port"`
-	}
+	var req ExposeServerRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

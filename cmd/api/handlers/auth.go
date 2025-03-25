@@ -1,3 +1,4 @@
+// Package handlers contains the HTTP request handlers for the API endpoints.
 package handlers
 
 import (
@@ -15,20 +16,33 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// LoginRequest represents the login request
+// LoginRequest represents the login request payload.
 type LoginRequest struct {
-	Username string `json:"username" binding:"required"`
-	Password string `json:"password" binding:"required"`
+	Username string `json:"username" binding:"required" example:"admin"`
+	Password string `json:"password" binding:"required" example:"secretpassword"`
 }
 
-// RegisterRequest represents the register request
+// RegisterRequest represents the user registration request payload.
 type RegisterRequest struct {
-	Username string `json:"username" binding:"required,min=3,max=50"`
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required,min=8"`
+	Username string `json:"username" binding:"required,min=3,max=50" example:"newuser"`
+	Email    string `json:"email" binding:"required,email" example:"user@example.com"`
+	Password string `json:"password" binding:"required,min=8" example:"securepass123"`
 }
 
-// LoginHandler handles user login with username and password
+// LoginHandler authenticates users with username and password.
+//
+// @Summary      Login user
+// @Description  Authenticate a user with username and password
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        request  body      LoginRequest  true  "Login credentials"
+// @Success      200      {object}  map[string]interface{}  "Authentication successful"
+// @Failure      400      {object}  map[string]string       "Invalid request format"
+// @Failure      401      {object}  map[string]string       "Authentication failed"
+// @Failure      403      {object}  map[string]string       "Account inactive"
+// @Failure      500      {object}  map[string]string       "Server error"
+// @Router       /auth/login [post]
 func LoginHandler(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -95,7 +109,19 @@ func LoginHandler(c *gin.Context) {
 	})
 }
 
-// RegisterHandler handles user registration
+// RegisterHandler creates a new user account.
+//
+// @Summary      Register new user
+// @Description  Create a new user account
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        request  body      RegisterRequest  true  "Registration information"
+// @Success      201      {object}  map[string]interface{}  "Registration successful"
+// @Failure      400      {object}  map[string]string       "Invalid request format"
+// @Failure      409      {object}  map[string]string       "User already exists"
+// @Failure      500      {object}  map[string]string       "Server error"
+// @Router       /auth/register [post]
 func RegisterHandler(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -145,7 +171,16 @@ func RegisterHandler(c *gin.Context) {
 	})
 }
 
-// GetUserInfoHandler returns information about the authenticated user
+// GetUserInfoHandler returns information about the authenticated user.
+//
+// @Summary      Get current user info
+// @Description  Returns information about the currently authenticated user
+// @Tags         auth
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {object}  map[string]interface{}  "User information"
+// @Failure      401  {object}  map[string]string       "Authentication required"
+// @Router       /auth/me [get]
 func GetUserInfoHandler(c *gin.Context) {
 	user, ok := auth.GetCurrentUser(c)
 	if !ok {
@@ -164,7 +199,8 @@ func GetUserInfoHandler(c *gin.Context) {
 	})
 }
 
-// GenerateStateValue creates a random state value for OAuth flows
+// GenerateStateValue creates a random state value for OAuth flows.
+// It returns a base64-encoded random string and any error encountered.
 func GenerateStateValue() (string, error) {
 	b := make([]byte, 32)
 	_, err := rand.Read(b)
@@ -174,7 +210,17 @@ func GenerateStateValue() (string, error) {
 	return base64.URLEncoding.EncodeToString(b), nil
 }
 
-// OAuthLoginHandler initiates the OAuth login flow
+// OAuthLoginHandler initiates the OAuth login flow.
+//
+// @Summary      Start OAuth login
+// @Description  Redirects to OAuth provider's login page
+// @Tags         auth
+// @Produce      html
+// @Param        provider  path      string  true  "OAuth provider (e.g., 'authentik')"
+// @Success      307       {string}  string  "Redirect to OAuth provider"
+// @Failure      400       {object}  map[string]string  "OAuth not enabled or invalid provider"
+// @Failure      500       {object}  map[string]string  "Server error"
+// @Router       /auth/oauth/{provider} [get]
 func OAuthLoginHandler(c *gin.Context) {
 	// Check if OAuth is enabled
 	if !config.OAuthEnabled {
@@ -219,7 +265,19 @@ func OAuthLoginHandler(c *gin.Context) {
 	c.Redirect(http.StatusTemporaryRedirect, authURL)
 }
 
-// OAuthCallbackHandler handles the OAuth callback
+// OAuthCallbackHandler handles the OAuth callback from providers.
+//
+// @Summary      OAuth callback
+// @Description  Handles the callback from OAuth provider and creates/authenticates user
+// @Tags         auth
+// @Produce      html
+// @Param        provider  path      string  true  "OAuth provider (e.g., 'authentik')"
+// @Param        code      query     string  true  "OAuth code"
+// @Param        state     query     string  true  "OAuth state"
+// @Success      307       {string}  string  "Redirect to frontend with token"
+// @Failure      400       {object}  map[string]string  "Invalid request or state mismatch"
+// @Failure      500       {object}  map[string]string  "Server error"
+// @Router       /auth/callback/{provider} [get]
 func OAuthCallbackHandler(c *gin.Context) {
 	// Check if OAuth is enabled
 	if !config.OAuthEnabled {
