@@ -81,7 +81,7 @@ func RestartMinecraftServerHandler(c *gin.Context) {
 	}
 
 	// Save the world
-	stdout, stderr, err := kubernetes.SaveWorld(pod.Name, config.DeploymentPrefix)
+	stdout, stderr, err := kubernetes.SaveWorld(pod.Name, config.DefaultNamespace)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":          "Failed to save world: " + err.Error(),
@@ -240,7 +240,7 @@ func ExecCommandHandler(c *gin.Context) {
 	execCommand := "mc-send-to-console " + req.Command
 
 	// Execute the command in the pod
-	stdout, stderr, err := kubernetes.ExecuteCommandInPod(pod.Name, config.DeploymentPrefix, "minecraft-server", execCommand)
+	stdout, stderr, err := kubernetes.ExecuteCommandInPod(pod.Name, config.DefaultNamespace, "minecraft-server", execCommand)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":   "Failed to execute command: " + err.Error(),
