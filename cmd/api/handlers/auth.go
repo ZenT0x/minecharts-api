@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"log"
 	"net/http"
 	"time"
 
@@ -31,27 +32,39 @@ type RegisterRequest struct {
 func LoginHandler(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("Login error: Invalid request format: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
+	log.Printf("Login attempt for username: %s", req.Username)
+
 	// Get user from database
 	db := database.GetDB()
+	log.Printf("Using database implementation: %T", db)
+
 	user, err := db.GetUserByUsername(c.Request.Context(), req.Username)
 	if err != nil {
 		if err == database.ErrUserNotFound {
+			log.Printf("Login failed: User not found: %s", req.Username)
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username or password"})
 			return
 		}
+		log.Printf("Login error: Database error: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get user"})
 		return
 	}
 
+	log.Printf("User found: ID=%d, Username=%s", user.ID, user.Username)
+
 	// Verify password
 	if err := auth.VerifyPassword(user.PasswordHash, req.Password); err != nil {
+		log.Printf("Login failed: Invalid password for user: %s", req.Username)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username or password"})
 		return
 	}
+
+	log.Printf("Password verification successful for user: %s", req.Username)
 
 	// Check if user is active
 	if !user.Active {

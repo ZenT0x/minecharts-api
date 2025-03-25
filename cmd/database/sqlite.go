@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"database/sql"
+	"log"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -154,20 +155,26 @@ func (s *SQLiteDB) GetUserByID(ctx context.Context, id int64) (*User, error) {
 
 // GetUserByUsername retrieves a user by username
 func (s *SQLiteDB) GetUserByUsername(ctx context.Context, username string) (*User, error) {
+	log.Printf("SQLite: GetUserByUsername called for username: %s", username)
+
 	user := &User{}
-	err := s.db.QueryRowContext(ctx,
-		"SELECT id, username, email, password_hash, permissions, active, last_login, created_at, updated_at FROM users WHERE username = ?",
-		username,
-	).Scan(
+	query := "SELECT id, username, email, password_hash, permissions, active, last_login, created_at, updated_at FROM users WHERE username = ?"
+	log.Printf("SQLite: Executing query: %s with username: %s", query, username)
+
+	err := s.db.QueryRowContext(ctx, query, username).Scan(
 		&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.Permissions,
 		&user.Active, &user.LastLogin, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
+		log.Printf("SQLite: User not found for username: %s", username)
 		return nil, ErrUserNotFound
 	}
 	if err != nil {
+		log.Printf("SQLite: Database error in GetUserByUsername: %v", err)
 		return nil, err
 	}
+
+	log.Printf("SQLite: Successfully retrieved user: ID=%d, Username=%s", user.ID, user.Username)
 	return user, nil
 }
 
