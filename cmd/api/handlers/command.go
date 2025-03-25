@@ -53,7 +53,7 @@ func StartMinecraftServerHandler(c *gin.Context) {
 	}
 
 	// Creates the deployment with the existing PVC (created if necessary).
-	if err := kubernetes.CreateDeployment(config.DeploymentPrefix, deploymentName, pvcName, envVars); err != nil {
+	if err := kubernetes.CreateDeployment(config.DefaultNamespace, deploymentName, pvcName, envVars); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create deployment: " + err.Error()})
 		return
 	}
@@ -66,13 +66,13 @@ func RestartMinecraftServerHandler(c *gin.Context) {
 	deploymentName, _ := kubernetes.GetServerInfo(c)
 
 	// Check if the deployment exists
-	_, ok := kubernetes.CheckDeploymentExists(c, config.DeploymentPrefix, deploymentName)
+	_, ok := kubernetes.CheckDeploymentExists(c, config.DefaultNamespace, deploymentName)
 	if !ok {
 		return
 	}
 
 	// Get the pod associated with this deployment to run the save command
-	pod, err := kubernetes.GetMinecraftPod(config.DeploymentPrefix, deploymentName)
+	pod, err := kubernetes.GetMinecraftPod(config.DefaultNamespace, deploymentName)
 	if err != nil || pod == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to find pod for deployment: " + deploymentName,
@@ -94,7 +94,7 @@ func RestartMinecraftServerHandler(c *gin.Context) {
 	// time.Sleep(10 * time.Second)
 
 	// Restart the deployment
-	if err := kubernetes.RestartDeployment(config.DeploymentPrefix, deploymentName); err != nil {
+	if err := kubernetes.RestartDeployment(config.DefaultNamespace, deploymentName); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":          "Failed to restart deployment: " + err.Error(),
 			"deploymentName": deploymentName,
@@ -190,14 +190,14 @@ func DeleteMinecraftServerHandler(c *gin.Context) {
 	deploymentName, pvcName := kubernetes.GetServerInfo(c)
 
 	// Delete the deployment if it exists
-	_ = kubernetes.DeleteDeployment(config.DeploymentPrefix, deploymentName)
+	_ = kubernetes.DeleteDeployment(config.DefaultNamespace, deploymentName)
 
 	// Delete the PVC
-	_ = kubernetes.DeletePVC(config.DeploymentPrefix, pvcName)
+	_ = kubernetes.DeletePVC(config.DefaultNamespace, pvcName)
 
 	// Clean up network resources
 	serviceName := deploymentName + "-svc"
-	_ = kubernetes.DeleteService(config.DeploymentPrefix, serviceName)
+	_ = kubernetes.DeleteService(config.DefaultNamespace, serviceName)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":        "Deployment, PVC and network resources deleted",
@@ -213,13 +213,13 @@ func ExecCommandHandler(c *gin.Context) {
 	deploymentName := config.DeploymentPrefix + serverName
 
 	// Check if the deployment exists
-	_, ok := kubernetes.CheckDeploymentExists(c, config.DeploymentPrefix, deploymentName)
+	_, ok := kubernetes.CheckDeploymentExists(c, config.DefaultNamespace, deploymentName)
 	if !ok {
 		return
 	}
 
 	// Get the pod associated with this deployment
-	pod, err := kubernetes.GetMinecraftPod(config.DeploymentPrefix, deploymentName)
+	pod, err := kubernetes.GetMinecraftPod(config.DefaultNamespace, deploymentName)
 	if err != nil || pod == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to find running pod for deployment: " + deploymentName,
