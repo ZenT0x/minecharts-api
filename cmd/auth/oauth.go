@@ -149,13 +149,14 @@ func SyncOAuthUser(ctx context.Context, userInfo *OAuthUserInfo) (*database.User
 		}
 
 		// Create new user with read-only permissions by default
+		now := time.Now()
 		newUser := &database.User{
 			Username:     userInfo.Username,
 			Email:        userInfo.Email,
 			PasswordHash: passwordHash,
 			Permissions:  int64(database.PermReadOnly), // Default to read-only permissions
 			Active:       true,
-			LastLogin:    time.Now(),
+			LastLogin:    &now,
 		}
 
 		if err := db.CreateUser(ctx, newUser); err != nil {
@@ -168,7 +169,8 @@ func SyncOAuthUser(ctx context.Context, userInfo *OAuthUserInfo) (*database.User
 	}
 
 	// Update last login time
-	user.LastLogin = time.Now()
+	now := time.Now()
+	user.LastLogin = &now
 	if err := db.UpdateUser(ctx, user); err != nil {
 		return nil, err
 	}

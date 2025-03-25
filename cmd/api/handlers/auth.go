@@ -80,10 +80,10 @@ func LoginHandler(c *gin.Context) {
 	}
 
 	// Update last login time
-	user.LastLogin = time.Now()
+	now := time.Now()
+	user.LastLogin = &now
 	if err := db.UpdateUser(c.Request.Context(), user); err != nil {
-		// Non-critical error, just log it
-		// log.Printf("Failed to update last login time: %v", err)
+		//log.Printf("Failed to update last login time: %v", err)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
