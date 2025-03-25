@@ -28,7 +28,7 @@ func StartMinecraftServerHandler(c *gin.Context) {
 	pvcName := deploymentName + config.PVCSuffix
 
 	// Creates the PVC if it doesn't already exist.
-	if err := kubernetes.EnsurePVC(config.DeploymentPrefix, pvcName); err != nil {
+	if err := kubernetes.EnsurePVC(config.DefaultNamespace, pvcName); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to ensure PVC: " + err.Error()})
 		return
 	}
