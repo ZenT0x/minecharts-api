@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"minecharts/cmd/config"
+	"minecharts/cmd/logging"
 
 	"github.com/gin-gonic/gin"
 	appsv1 "k8s.io/api/apps/v1"
@@ -20,17 +21,40 @@ import (
 // CheckDeploymentExists checks if a deployment exists and returns an HTTP error if it does not.
 // Returns the deployment and a boolean indicating whether it exists.
 func CheckDeploymentExists(c *gin.Context, namespace, deploymentName string) (*appsv1.Deployment, bool) {
+	logging.WithFields(
+		logging.F("namespace", namespace),
+		logging.F("deployment_name", deploymentName),
+		logging.F("remote_ip", c.ClientIP()),
+	).Debug("Checking if deployment exists")
+
 	deployment, err := Clientset.AppsV1().Deployments(namespace).Get(context.Background(), deploymentName, metav1.GetOptions{})
 	if err != nil {
+		logging.WithFields(
+			logging.F("namespace", namespace),
+			logging.F("deployment_name", deploymentName),
+			logging.F("error", err.Error()),
+			logging.F("remote_ip", c.ClientIP()),
+		).Warn("Deployment not found")
 		c.JSON(http.StatusNotFound, gin.H{"error": "Deployment not found"})
 		return nil, false
 	}
+
+	logging.WithFields(
+		logging.F("namespace", namespace),
+		logging.F("deployment_name", deploymentName),
+	).Debug("Deployment found")
 	return deployment, true
 }
 
 // CreateDeployment creates a Minecraft deployment using the specified PVC and environment variables.
 // It configures the deployment with appropriate lifecycle hooks and volume mounts.
 func CreateDeployment(namespace, deploymentName, pvcName string, envVars []corev1.EnvVar) error {
+	logging.WithFields(
+		logging.F("namespace", namespace),
+		logging.F("deployment_name", deploymentName),
+		logging.F("pvc_name", pvcName),
+	).Info("Creating Minecraft server deployment")
+
 	replicas := int32(config.DefaultReplicas)
 
 	deployment := &appsv1.Deployment{
@@ -103,14 +127,39 @@ func CreateDeployment(namespace, deploymentName, pvcName string, envVars []corev
 	}
 
 	_, err := Clientset.AppsV1().Deployments(namespace).Create(context.Background(), deployment, metav1.CreateOptions{})
-	return err
+	if err != nil {
+		logging.WithFields(
+			logging.F("namespace", namespace),
+			logging.F("deployment_name", deploymentName),
+			logging.F("pvc_name", pvcName),
+			logging.F("error", err.Error()),
+		).Error("Failed to create deployment")
+		return err
+	}
+
+	logging.WithFields(
+		logging.F("namespace", namespace),
+		logging.F("deployment_name", deploymentName),
+		logging.F("pvc_name", pvcName),
+	).Info("Deployment created successfully")
+	return nil
 }
 
 // RestartDeployment restarts a deployment by updating an annotation to trigger a rollout.
 // This is a non-disruptive way to restart pods in a deployment.
 func RestartDeployment(namespace, deploymentName string) error {
+	logging.WithFields(
+		logging.F("namespace", namespace),
+		logging.F("deployment_name", deploymentName),
+	).Info("Restarting deployment")
+
 	deployment, err := Clientset.AppsV1().Deployments(namespace).Get(context.Background(), deploymentName, metav1.GetOptions{})
 	if err != nil {
+		logging.WithFields(
+			logging.F("namespace", namespace),
+			logging.F("deployment_name", deploymentName),
+			logging.F("error", err.Error()),
+		).Error("Failed to get deployment for restart")
 		return err
 	}
 
@@ -119,48 +168,145 @@ func RestartDeployment(namespace, deploymentName string) error {
 	}
 
 	// Add or update a restart timestamp annotation
-	deployment.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
+	restartTime := time.Now().Format(time.RFC3339)
+	deployment.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"] = restartTime
+
+	logging.WithFields(
+		logging.F("namespace", namespace),
+		logging.F("deployment_name", deploymentName),
+		logging.F("restart_time", restartTime),
+	).Debug("Setting restart annotation")
 
 	_, err = Clientset.AppsV1().Deployments(namespace).Update(context.Background(), deployment, metav1.UpdateOptions{})
-	return err
+	if err != nil {
+		logging.WithFields(
+			logging.F("namespace", namespace),
+			logging.F("deployment_name", deploymentName),
+			logging.F("error", err.Error()),
+		).Error("Failed to update deployment for restart")
+		return err
+	}
+
+	logging.WithFields(
+		logging.F("namespace", namespace),
+		logging.F("deployment_name", deploymentName),
+	).Info("Deployment restart triggered successfully")
+	return nil
 }
 
 // UpdateDeployment updates a deployment with new environment variables.
 // This allows reconfiguring a Minecraft server without restarting it.
 func UpdateDeployment(namespace, deploymentName string, envVars []corev1.EnvVar) error {
+	logging.WithFields(
+		logging.F("namespace", namespace),
+		logging.F("deployment_name", deploymentName),
+	).Info("Updating deployment environment variables")
+
 	deployment, err := Clientset.AppsV1().Deployments(namespace).Get(context.Background(), deploymentName, metav1.GetOptions{})
 	if err != nil {
+		logging.WithFields(
+			logging.F("namespace", namespace),
+			logging.F("deployment_name", deploymentName),
+			logging.F("error", err.Error()),
+		).Error("Failed to get deployment for update")
 		return err
 	}
 
 	// Update environment variables for the minecraft-server container
+	containerUpdated := false
 	for i := range deployment.Spec.Template.Spec.Containers {
 		if deployment.Spec.Template.Spec.Containers[i].Name == "minecraft-server" {
 			deployment.Spec.Template.Spec.Containers[i].Env = envVars
+			containerUpdated = true
 			break
 		}
 	}
 
+	if !containerUpdated {
+		logging.WithFields(
+			logging.F("namespace", namespace),
+			logging.F("deployment_name", deploymentName),
+		).Warn("Minecraft server container not found in deployment")
+	}
+
 	_, err = Clientset.AppsV1().Deployments(namespace).Update(context.Background(), deployment, metav1.UpdateOptions{})
-	return err
+	if err != nil {
+		logging.WithFields(
+			logging.F("namespace", namespace),
+			logging.F("deployment_name", deploymentName),
+			logging.F("error", err.Error()),
+		).Error("Failed to update deployment")
+		return err
+	}
+
+	logging.WithFields(
+		logging.F("namespace", namespace),
+		logging.F("deployment_name", deploymentName),
+	).Info("Deployment updated successfully")
+	return nil
 }
 
 // DeleteDeployment deletes a deployment by name.
 func DeleteDeployment(namespace, deploymentName string) error {
-	return Clientset.AppsV1().Deployments(namespace).Delete(context.Background(), deploymentName, metav1.DeleteOptions{})
+	logging.WithFields(
+		logging.F("namespace", namespace),
+		logging.F("deployment_name", deploymentName),
+	).Info("Deleting deployment")
+
+	err := Clientset.AppsV1().Deployments(namespace).Delete(context.Background(), deploymentName, metav1.DeleteOptions{})
+	if err != nil {
+		logging.WithFields(
+			logging.F("namespace", namespace),
+			logging.F("deployment_name", deploymentName),
+			logging.F("error", err.Error()),
+		).Error("Failed to delete deployment")
+		return err
+	}
+
+	logging.WithFields(
+		logging.F("namespace", namespace),
+		logging.F("deployment_name", deploymentName),
+	).Info("Deployment deleted successfully")
+	return nil
 }
 
 // SetDeploymentReplicas updates the number of replicas for a deployment.
 // This is used to scale up (start) or down (stop) Minecraft servers.
 func SetDeploymentReplicas(namespace, deploymentName string, replicas int32) error {
+	logging.WithFields(
+		logging.F("namespace", namespace),
+		logging.F("deployment_name", deploymentName),
+		logging.F("replicas", replicas),
+	).Info("Setting deployment replicas")
+
 	deployment, err := Clientset.AppsV1().Deployments(namespace).Get(
 		context.Background(), deploymentName, metav1.GetOptions{})
 	if err != nil {
+		logging.WithFields(
+			logging.F("namespace", namespace),
+			logging.F("deployment_name", deploymentName),
+			logging.F("error", err.Error()),
+		).Error("Failed to get deployment for scaling")
 		return err
 	}
 
 	deployment.Spec.Replicas = &replicas
 	_, err = Clientset.AppsV1().Deployments(namespace).Update(
 		context.Background(), deployment, metav1.UpdateOptions{})
-	return err
+	if err != nil {
+		logging.WithFields(
+			logging.F("namespace", namespace),
+			logging.F("deployment_name", deploymentName),
+			logging.F("replicas", replicas),
+			logging.F("error", err.Error()),
+		).Error("Failed to update deployment replicas")
+		return err
+	}
+
+	logging.WithFields(
+		logging.F("namespace", namespace),
+		logging.F("deployment_name", deploymentName),
+		logging.F("replicas", replicas),
+	).Info("Deployment replicas updated successfully")
+	return nil
 }

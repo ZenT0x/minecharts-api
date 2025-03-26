@@ -8,6 +8,7 @@ import (
 	"minecharts/cmd/auth"
 	"minecharts/cmd/config"
 	"minecharts/cmd/database"
+	"minecharts/cmd/logging"
 
 	"github.com/gin-gonic/gin"
 )
@@ -35,12 +36,29 @@ type CreateAPIKeyRequest struct {
 func CreateAPIKeyHandler(c *gin.Context) {
 	user, ok := auth.GetCurrentUser(c)
 	if !ok {
+		logging.WithFields(
+			logging.F("path", c.Request.URL.Path),
+			logging.F("remote_ip", c.ClientIP()),
+			logging.F("error", "not_authenticated"),
+		).Warn("API key creation failed: user not authenticated")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
 		return
 	}
 
+	logging.WithFields(
+		logging.F("user_id", user.ID),
+		logging.F("username", user.Username),
+		logging.F("remote_ip", c.ClientIP()),
+	).Info("API key creation requested")
+
 	var req CreateAPIKeyRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		logging.WithFields(
+			logging.F("user_id", user.ID),
+			logging.F("username", user.Username),
+			logging.F("remote_ip", c.ClientIP()),
+			logging.F("error", err.Error()),
+		).Warn("API key creation failed: invalid request format")
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -48,9 +66,16 @@ func CreateAPIKeyHandler(c *gin.Context) {
 	// Generate a new API key
 	keyValue, err := auth.GenerateAPIKey(config.APIKeyPrefix)
 	if err != nil {
+		logging.WithFields(
+			logging.F("user_id", user.ID),
+			logging.F("username", user.Username),
+			logging.F("error", err.Error()),
+		).Error("Failed to generate API key")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate API key"})
 		return
 	}
+
+	logging.Debug("API key generated successfully")
 
 	// Create API key record
 	apiKey := &database.APIKey{
@@ -62,9 +87,21 @@ func CreateAPIKeyHandler(c *gin.Context) {
 
 	db := database.GetDB()
 	if err := db.CreateAPIKey(c.Request.Context(), apiKey); err != nil {
+		logging.WithFields(
+			logging.F("user_id", user.ID),
+			logging.F("username", user.Username),
+			logging.F("error", err.Error()),
+		).Error("Failed to save API key to database")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create API key"})
 		return
 	}
+
+	logging.WithFields(
+		logging.F("user_id", user.ID),
+		logging.F("username", user.Username),
+		logging.F("api_key_id", apiKey.ID),
+		logging.F("expires_at", apiKey.ExpiresAt),
+	).Info("API key created successfully")
 
 	c.JSON(http.StatusCreated, gin.H{
 		"id":          apiKey.ID,
@@ -89,13 +126,29 @@ func CreateAPIKeyHandler(c *gin.Context) {
 func ListAPIKeysHandler(c *gin.Context) {
 	user, ok := auth.GetCurrentUser(c)
 	if !ok {
+		logging.WithFields(
+			logging.F("path", c.Request.URL.Path),
+			logging.F("remote_ip", c.ClientIP()),
+			logging.F("error", "not_authenticated"),
+		).Warn("API key listing failed: user not authenticated")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
 		return
 	}
 
+	logging.WithFields(
+		logging.F("user_id", user.ID),
+		logging.F("username", user.Username),
+		logging.F("remote_ip", c.ClientIP()),
+	).Info("API key listing requested")
+
 	db := database.GetDB()
 	apiKeys, err := db.ListAPIKeysByUser(c.Request.Context(), user.ID)
 	if err != nil {
+		logging.WithFields(
+			logging.F("user_id", user.ID),
+			logging.F("username", user.Username),
+			logging.F("error", err.Error()),
+		).Error("Failed to list API keys from database")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list API keys"})
 		return
 	}
@@ -115,6 +168,12 @@ func ListAPIKeysHandler(c *gin.Context) {
 			"created_at":  key.CreatedAt,
 		}
 	}
+
+	logging.WithFields(
+		logging.F("user_id", user.ID),
+		logging.F("username", user.Username),
+		logging.F("key_count", len(apiKeys)),
+	).Debug("API keys listed successfully")
 
 	c.JSON(http.StatusOK, response)
 }
@@ -136,6 +195,11 @@ func ListAPIKeysHandler(c *gin.Context) {
 func DeleteAPIKeyHandler(c *gin.Context) {
 	user, ok := auth.GetCurrentUser(c)
 	if !ok {
+		logging.WithFields(
+			logging.F("path", c.Request.URL.Path),
+			logging.F("remote_ip", c.ClientIP()),
+			logging.F("error", "not_authenticated"),
+		).Warn("API key deletion failed: user not authenticated")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
 		return
 	}
@@ -144,15 +208,35 @@ func DeleteAPIKeyHandler(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
+		logging.WithFields(
+			logging.F("user_id", user.ID),
+			logging.F("username", user.Username),
+			logging.F("key_id_param", idStr),
+			logging.F("remote_ip", c.ClientIP()),
+			logging.F("error", "invalid_id_format"),
+		).Warn("API key deletion failed: invalid ID format")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid API key ID"})
 		return
 	}
+
+	logging.WithFields(
+		logging.F("user_id", user.ID),
+		logging.F("username", user.Username),
+		logging.F("api_key_id", id),
+		logging.F("remote_ip", c.ClientIP()),
+	).Info("API key deletion requested")
 
 	// Verify the API key belongs to the user (unless admin)
 	if !user.IsAdmin() {
 		db := database.GetDB()
 		keys, err := db.ListAPIKeysByUser(c.Request.Context(), user.ID)
 		if err != nil {
+			logging.WithFields(
+				logging.F("user_id", user.ID),
+				logging.F("username", user.Username),
+				logging.F("api_key_id", id),
+				logging.F("error", err.Error()),
+			).Error("Failed to verify API key ownership")
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to verify API key ownership"})
 			return
 		}
@@ -166,6 +250,13 @@ func DeleteAPIKeyHandler(c *gin.Context) {
 		}
 
 		if !found {
+			logging.WithFields(
+				logging.F("user_id", user.ID),
+				logging.F("username", user.Username),
+				logging.F("api_key_id", id),
+				logging.F("remote_ip", c.ClientIP()),
+				logging.F("error", "permission_denied"),
+			).Warn("API key deletion failed: user doesn't own this API key")
 			c.JSON(http.StatusForbidden, gin.H{"error": "You do not own this API key"})
 			return
 		}
@@ -174,9 +265,22 @@ func DeleteAPIKeyHandler(c *gin.Context) {
 	// Delete the API key
 	db := database.GetDB()
 	if err := db.DeleteAPIKey(c.Request.Context(), id); err != nil {
+		logging.WithFields(
+			logging.F("user_id", user.ID),
+			logging.F("username", user.Username),
+			logging.F("api_key_id", id),
+			logging.F("error", err.Error()),
+		).Error("Failed to delete API key from database")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete API key"})
 		return
 	}
+
+	logging.WithFields(
+		logging.F("user_id", user.ID),
+		logging.F("username", user.Username),
+		logging.F("api_key_id", id),
+		logging.F("remote_ip", c.ClientIP()),
+	).Info("API key deleted successfully")
 
 	c.JSON(http.StatusOK, gin.H{"message": "API key deleted"})
 }

@@ -3,6 +3,7 @@ package kubernetes
 import (
 	"context"
 	"minecharts/cmd/config"
+	"minecharts/cmd/logging"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -12,10 +13,26 @@ import (
 
 // ensurePVC checks if a PVC exists in the given namespace; if not, it creates it.
 func EnsurePVC(namespace, pvcName string) error {
+	logging.WithFields(
+		logging.F("namespace", namespace),
+		logging.F("pvc_name", pvcName),
+	).Debug("Checking if PVC exists")
+
 	_, err := Clientset.CoreV1().PersistentVolumeClaims(namespace).Get(context.Background(), pvcName, metav1.GetOptions{})
 	if err == nil {
+		logging.WithFields(
+			logging.F("namespace", namespace),
+			logging.F("pvc_name", pvcName),
+		).Debug("PVC already exists")
 		return nil // PVC already exists.
 	}
+
+	logging.WithFields(
+		logging.F("namespace", namespace),
+		logging.F("pvc_name", pvcName),
+		logging.F("storage_size", config.StorageSize),
+		logging.F("storage_class", config.StorageClass),
+	).Info("Creating new PVC")
 
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
@@ -35,10 +52,44 @@ func EnsurePVC(namespace, pvcName string) error {
 		},
 	}
 	_, err = Clientset.CoreV1().PersistentVolumeClaims(namespace).Create(context.Background(), pvc, metav1.CreateOptions{})
-	return err
+	if err != nil {
+		logging.WithFields(
+			logging.F("namespace", namespace),
+			logging.F("pvc_name", pvcName),
+			logging.F("error", err.Error()),
+		).Error("Failed to create PVC")
+		return err
+	}
+
+	logging.WithFields(
+		logging.F("namespace", namespace),
+		logging.F("pvc_name", pvcName),
+	).Info("PVC created successfully")
+
+	return nil
 }
 
 // deletePVC removes a PVC if it exists
 func DeletePVC(namespace, pvcName string) error {
-	return Clientset.CoreV1().PersistentVolumeClaims(namespace).Delete(context.Background(), pvcName, metav1.DeleteOptions{})
+	logging.WithFields(
+		logging.F("namespace", namespace),
+		logging.F("pvc_name", pvcName),
+	).Debug("Attempting to delete PVC")
+
+	err := Clientset.CoreV1().PersistentVolumeClaims(namespace).Delete(context.Background(), pvcName, metav1.DeleteOptions{})
+	if err != nil {
+		logging.WithFields(
+			logging.F("namespace", namespace),
+			logging.F("pvc_name", pvcName),
+			logging.F("error", err.Error()),
+		).Error("Failed to delete PVC")
+		return err
+	}
+
+	logging.WithFields(
+		logging.F("namespace", namespace),
+		logging.F("pvc_name", pvcName),
+	).Info("PVC deleted successfully")
+
+	return nil
 }

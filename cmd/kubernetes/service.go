@@ -3,6 +3,8 @@ package kubernetes
 import (
 	"context"
 
+	"minecharts/cmd/logging"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -10,9 +12,19 @@ import (
 
 // createService creates a Kubernetes Service to expose a Minecraft server deployment
 func CreateService(namespace, deploymentName string, serviceType corev1.ServiceType, port int32, annotations map[string]string) (*corev1.Service, error) {
+	serviceName := deploymentName + "-svc"
+
+	logging.WithFields(
+		logging.F("namespace", namespace),
+		logging.F("deployment_name", deploymentName),
+		logging.F("service_name", serviceName),
+		logging.F("service_type", serviceType),
+		logging.F("port", port),
+	).Info("Creating Kubernetes service")
+
 	service := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: deploymentName + "-svc",
+			Name: serviceName,
 			Labels: map[string]string{
 				"created-by": "minecharts-api",
 				"app":        deploymentName,
@@ -35,15 +47,74 @@ func CreateService(namespace, deploymentName string, serviceType corev1.ServiceT
 		},
 	}
 
-	return Clientset.CoreV1().Services(namespace).Create(context.Background(), service, metav1.CreateOptions{})
+	createdService, err := Clientset.CoreV1().Services(namespace).Create(context.Background(), service, metav1.CreateOptions{})
+	if err != nil {
+		logging.WithFields(
+			logging.F("namespace", namespace),
+			logging.F("service_name", serviceName),
+			logging.F("error", err.Error()),
+		).Error("Failed to create service")
+		return nil, err
+	}
+
+	logging.WithFields(
+		logging.F("namespace", namespace),
+		logging.F("service_name", serviceName),
+		logging.F("service_type", serviceType),
+		logging.F("cluster_ip", createdService.Spec.ClusterIP),
+	).Info("Service created successfully")
+
+	return createdService, nil
 }
 
 // deleteService removes a service if it exists
 func DeleteService(namespace, serviceName string) error {
-	return Clientset.CoreV1().Services(namespace).Delete(context.Background(), serviceName, metav1.DeleteOptions{})
+	logging.WithFields(
+		logging.F("namespace", namespace),
+		logging.F("service_name", serviceName),
+	).Debug("Attempting to delete service")
+
+	err := Clientset.CoreV1().Services(namespace).Delete(context.Background(), serviceName, metav1.DeleteOptions{})
+	if err != nil {
+		logging.WithFields(
+			logging.F("namespace", namespace),
+			logging.F("service_name", serviceName),
+			logging.F("error", err.Error()),
+		).Error("Failed to delete service")
+		return err
+	}
+
+	logging.WithFields(
+		logging.F("namespace", namespace),
+		logging.F("service_name", serviceName),
+	).Info("Service deleted successfully")
+
+	return nil
 }
 
 // getServiceDetails retrieves information about an existing service
 func GetServiceDetails(namespace, serviceName string) (*corev1.Service, error) {
-	return Clientset.CoreV1().Services(namespace).Get(context.Background(), serviceName, metav1.GetOptions{})
+	logging.WithFields(
+		logging.F("namespace", namespace),
+		logging.F("service_name", serviceName),
+	).Debug("Getting service details")
+
+	service, err := Clientset.CoreV1().Services(namespace).Get(context.Background(), serviceName, metav1.GetOptions{})
+	if err != nil {
+		logging.WithFields(
+			logging.F("namespace", namespace),
+			logging.F("service_name", serviceName),
+			logging.F("error", err.Error()),
+		).Error("Failed to get service details")
+		return nil, err
+	}
+
+	logging.WithFields(
+		logging.F("namespace", namespace),
+		logging.F("service_name", serviceName),
+		logging.F("service_type", service.Spec.Type),
+		logging.F("cluster_ip", service.Spec.ClusterIP),
+	).Debug("Retrieved service details")
+
+	return service, nil
 }

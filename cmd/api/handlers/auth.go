@@ -300,6 +300,10 @@ func GenerateStateValue() (string, error) {
 func OAuthLoginHandler(c *gin.Context) {
 	// Check if OAuth is enabled
 	if !config.OAuthEnabled {
+		logging.WithFields(
+			logging.F("remote_ip", c.ClientIP()),
+			logging.F("error", "oauth_not_enabled"),
+		).Warn("OAuth login failed: OAuth is not enabled")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "OAuth is not enabled"})
 		return
 	}
@@ -307,13 +311,28 @@ func OAuthLoginHandler(c *gin.Context) {
 	// Get provider from URL parameter
 	provider := c.Param("provider")
 	if provider != "authentik" {
+		logging.WithFields(
+			logging.F("remote_ip", c.ClientIP()),
+			logging.F("provider", provider),
+			logging.F("error", "unsupported_provider"),
+		).Warn("OAuth login failed: unsupported provider")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Unsupported OAuth provider"})
 		return
 	}
 
+	logging.WithFields(
+		logging.F("remote_ip", c.ClientIP()),
+		logging.F("provider", provider),
+	).Info("OAuth login flow initiated")
+
 	// Initialize OAuth provider
 	oauthProvider, err := auth.NewAuthentikProvider()
 	if err != nil {
+		logging.WithFields(
+			logging.F("remote_ip", c.ClientIP()),
+			logging.F("provider", provider),
+			logging.F("error", err.Error()),
+		).Error("Failed to initialize OAuth provider")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to initialize OAuth provider"})
 		return
 	}
@@ -321,6 +340,11 @@ func OAuthLoginHandler(c *gin.Context) {
 	// Generate and store state parameter to prevent CSRF
 	state, err := GenerateStateValue()
 	if err != nil {
+		logging.WithFields(
+			logging.F("remote_ip", c.ClientIP()),
+			logging.F("provider", provider),
+			logging.F("error", err.Error()),
+		).Error("Failed to generate OAuth state parameter")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate state"})
 		return
 	}
@@ -336,8 +360,19 @@ func OAuthLoginHandler(c *gin.Context) {
 		true, // HTTP-only
 	)
 
+	logging.WithFields(
+		logging.F("remote_ip", c.ClientIP()),
+		logging.F("provider", provider),
+	).Debug("OAuth state parameter generated and stored")
+
 	// Redirect to OAuth provider's auth page
 	authURL := oauthProvider.GetAuthURL(state)
+
+	logging.WithFields(
+		logging.F("remote_ip", c.ClientIP()),
+		logging.F("provider", provider),
+	).Info("Redirecting user to OAuth provider")
+
 	c.Redirect(http.StatusTemporaryRedirect, authURL)
 }
 
@@ -357,6 +392,10 @@ func OAuthLoginHandler(c *gin.Context) {
 func OAuthCallbackHandler(c *gin.Context) {
 	// Check if OAuth is enabled
 	if !config.OAuthEnabled {
+		logging.WithFields(
+			logging.F("remote_ip", c.ClientIP()),
+			logging.F("error", "oauth_not_enabled"),
+		).Warn("OAuth callback failed: OAuth is not enabled")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "OAuth is not enabled"})
 		return
 	}
@@ -364,15 +403,30 @@ func OAuthCallbackHandler(c *gin.Context) {
 	// Get provider from URL parameter
 	provider := c.Param("provider")
 	if provider != "authentik" {
+		logging.WithFields(
+			logging.F("remote_ip", c.ClientIP()),
+			logging.F("provider", provider),
+			logging.F("error", "unsupported_provider"),
+		).Warn("OAuth callback failed: unsupported provider")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Unsupported OAuth provider"})
 		return
 	}
+
+	logging.WithFields(
+		logging.F("remote_ip", c.ClientIP()),
+		logging.F("provider", provider),
+	).Info("OAuth callback received")
 
 	// Get code and state from query parameters
 	code := c.Query("code")
 	state := c.Query("state")
 
 	if code == "" {
+		logging.WithFields(
+			logging.F("remote_ip", c.ClientIP()),
+			logging.F("provider", provider),
+			logging.F("error", "missing_code"),
+		).Warn("OAuth callback failed: missing code parameter")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing code parameter"})
 		return
 	}
@@ -380,10 +434,19 @@ func OAuthCallbackHandler(c *gin.Context) {
 	// Retrieve and verify the state from cookie
 	savedState, err := c.Cookie("oauth_state")
 	if err != nil || savedState == "" || savedState != state {
+		logging.WithFields(
+			logging.F("remote_ip", c.ClientIP()),
+			logging.F("provider", provider),
+			logging.F("error", "state_mismatch"),
+			logging.F("have_cookie", savedState != ""),
+			logging.F("state_match", savedState == state),
+		).Warn("OAuth callback failed: invalid state parameter")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid OAuth state parameter"})
 		c.Abort()
 		return
 	}
+
+	logging.Debug("OAuth state verification successful")
 
 	// Clear the cookie after use
 	c.SetCookie("oauth_state", "", -1, "/", "", true, true)
@@ -391,6 +454,11 @@ func OAuthCallbackHandler(c *gin.Context) {
 	// Initialize OAuth provider
 	oauthProvider, err := auth.NewAuthentikProvider()
 	if err != nil {
+		logging.WithFields(
+			logging.F("remote_ip", c.ClientIP()),
+			logging.F("provider", provider),
+			logging.F("error", err.Error()),
+		).Error("Failed to initialize OAuth provider during callback")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to initialize OAuth provider"})
 		return
 	}
@@ -398,20 +466,45 @@ func OAuthCallbackHandler(c *gin.Context) {
 	// Exchange code for token
 	token, err := oauthProvider.Exchange(context.Background(), code)
 	if err != nil {
+		logging.WithFields(
+			logging.F("remote_ip", c.ClientIP()),
+			logging.F("provider", provider),
+			logging.F("error", err.Error()),
+		).Error("Failed to exchange OAuth code for token")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to exchange OAuth code: " + err.Error()})
 		return
 	}
 
+	logging.Debug("OAuth code successfully exchanged for token")
+
 	// Get user info from token
 	userInfo, err := oauthProvider.GetUserInfo(context.Background(), token)
 	if err != nil {
+		logging.WithFields(
+			logging.F("remote_ip", c.ClientIP()),
+			logging.F("provider", provider),
+			logging.F("error", err.Error()),
+		).Error("Failed to get user info from OAuth provider")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get user info: " + err.Error()})
 		return
 	}
 
+	logging.WithFields(
+		logging.F("remote_ip", c.ClientIP()),
+		logging.F("provider", provider),
+		logging.F("oauth_username", userInfo.Username),
+		logging.F("oauth_email", userInfo.Email),
+	).Info("Successfully retrieved user info from OAuth provider")
+
 	// Create or update user in database
 	user, err := auth.SyncOAuthUser(c.Request.Context(), userInfo)
 	if err != nil {
+		logging.WithFields(
+			logging.F("remote_ip", c.ClientIP()),
+			logging.F("provider", provider),
+			logging.F("oauth_username", userInfo.Username),
+			logging.F("error", err.Error()),
+		).Error("Failed to sync OAuth user with database")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to sync user: " + err.Error()})
 		return
 	}
@@ -419,12 +512,25 @@ func OAuthCallbackHandler(c *gin.Context) {
 	// Generate JWT token
 	jwtToken, err := auth.GenerateJWT(user.ID, user.Username, user.Email, user.Permissions)
 	if err != nil {
+		logging.WithFields(
+			logging.F("remote_ip", c.ClientIP()),
+			logging.F("provider", provider),
+			logging.F("user_id", user.ID),
+			logging.F("username", user.Username),
+			logging.F("error", err.Error()),
+		).Error("Failed to generate JWT token after OAuth authentication")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return
 	}
 
+	logging.WithFields(
+		logging.F("remote_ip", c.ClientIP()),
+		logging.F("provider", provider),
+		logging.F("user_id", user.ID),
+		logging.F("username", user.Username),
+	).Info("OAuth authentication successful, redirecting to frontend")
+
 	// Redirect to frontend with token
-	// In a real app, you might want to use a better method for passing the token
 	frontendRedirectURL := config.FrontendURL + "/oauth-callback?token=" + jwtToken
 	c.Redirect(http.StatusTemporaryRedirect, frontendRedirectURL)
 }

@@ -145,24 +145,62 @@ func StartMinecraftServerHandler(c *gin.Context) {
 func RestartMinecraftServerHandler(c *gin.Context) {
 	deploymentName, _ := kubernetes.GetServerInfo(c)
 
+	// Get current user for logging
+	user, _ := auth.GetCurrentUser(c)
+	userID := int64(0)
+	username := "unknown"
+	if user != nil {
+		userID = user.ID
+		username = user.Username
+	}
+
+	serverName := c.Param("serverName")
+
+	logging.WithFields(
+		logging.F("server_name", serverName),
+		logging.F("deployment", deploymentName),
+		logging.F("user_id", userID),
+		logging.F("username", username),
+		logging.F("remote_ip", c.ClientIP()),
+	).Info("Restarting Minecraft server")
+
 	// Check if the deployment exists
 	_, ok := kubernetes.CheckDeploymentExists(c, config.DefaultNamespace, deploymentName)
 	if !ok {
+		logging.WithFields(
+			logging.F("server_name", serverName),
+			logging.F("deployment", deploymentName),
+		).Warn("Deployment not found for restart")
 		return
 	}
 
 	// Get the pod associated with this deployment to run the save command
 	pod, err := kubernetes.GetMinecraftPod(config.DefaultNamespace, deploymentName)
 	if err != nil || pod == nil {
+		logging.WithFields(
+			logging.F("server_name", serverName),
+			logging.F("deployment", deploymentName),
+			logging.F("error", err),
+		).Error("Failed to find pod for deployment")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to find pod for deployment: " + deploymentName,
 		})
 		return
 	}
 
+	logging.WithFields(
+		logging.F("server_name", serverName),
+		logging.F("pod", pod.Name),
+	).Debug("Found pod for server restart")
+
 	// Save the world
 	stdout, stderr, err := kubernetes.SaveWorld(pod.Name, config.DefaultNamespace)
 	if err != nil {
+		logging.WithFields(
+			logging.F("server_name", serverName),
+			logging.F("pod", pod.Name),
+			logging.F("error", err.Error()),
+		).Error("Failed to save world before restart")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":          "Failed to save world: " + err.Error(),
 			"deploymentName": deploymentName,
@@ -170,17 +208,34 @@ func RestartMinecraftServerHandler(c *gin.Context) {
 		return
 	}
 
+	logging.WithFields(
+		logging.F("server_name", serverName),
+		logging.F("pod", pod.Name),
+	).Debug("World saved successfully before restart")
+
 	// Wait a moment for the save to complete
 	// time.Sleep(10 * time.Second)
 
 	// Restart the deployment
 	if err := kubernetes.RestartDeployment(config.DefaultNamespace, deploymentName); err != nil {
+		logging.WithFields(
+			logging.F("server_name", serverName),
+			logging.F("deployment", deploymentName),
+			logging.F("error", err.Error()),
+		).Error("Failed to restart deployment")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":          "Failed to restart deployment: " + err.Error(),
 			"deploymentName": deploymentName,
 		})
 		return
 	}
+
+	logging.WithFields(
+		logging.F("server_name", serverName),
+		logging.F("deployment", deploymentName),
+		logging.F("user_id", userID),
+		logging.F("username", username),
+	).Info("Minecraft server restarted successfully")
 
 	response := gin.H{
 		"message":        "Minecraft server restarting",
@@ -213,15 +268,43 @@ func RestartMinecraftServerHandler(c *gin.Context) {
 func StopMinecraftServerHandler(c *gin.Context) {
 	deploymentName, _ := kubernetes.GetServerInfo(c)
 
+	// Get current user for logging
+	user, _ := auth.GetCurrentUser(c)
+	userID := int64(0)
+	username := "unknown"
+	if user != nil {
+		userID = user.ID
+		username = user.Username
+	}
+
+	serverName := c.Param("serverName")
+
+	logging.WithFields(
+		logging.F("server_name", serverName),
+		logging.F("deployment", deploymentName),
+		logging.F("user_id", userID),
+		logging.F("username", username),
+		logging.F("remote_ip", c.ClientIP()),
+	).Info("Stopping Minecraft server")
+
 	// Check if the deployment exists
 	_, ok := kubernetes.CheckDeploymentExists(c, config.DefaultNamespace, deploymentName)
 	if !ok {
+		logging.WithFields(
+			logging.F("server_name", serverName),
+			logging.F("deployment", deploymentName),
+		).Warn("Deployment not found for stop operation")
 		return
 	}
 
 	// Get the pod associated with this deployment to run the save command
 	pod, err := kubernetes.GetMinecraftPod(config.DefaultNamespace, deploymentName)
 	if err != nil {
+		logging.WithFields(
+			logging.F("server_name", serverName),
+			logging.F("deployment", deploymentName),
+			logging.F("error", err.Error()),
+		).Error("Failed to find pod for deployment")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to find pod for deployment: " + deploymentName,
 		})
@@ -229,25 +312,50 @@ func StopMinecraftServerHandler(c *gin.Context) {
 	}
 
 	if pod != nil {
+		logging.WithFields(
+			logging.F("server_name", serverName),
+			logging.F("pod", pod.Name),
+		).Debug("Saving world before stopping server")
 		// Save the world before scaling down
 		_, _, err := kubernetes.ExecuteCommandInPod(pod.Name, config.DefaultNamespace, "minecraft-server", "mc-send-to-console save-all")
 		if err != nil {
+			logging.WithFields(
+				logging.F("server_name", serverName),
+				logging.F("pod", pod.Name),
+				logging.F("error", err.Error()),
+			).Error("Failed to save world before stopping")
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error":          "Failed to save world: " + err.Error(),
 				"deploymentName": deploymentName,
 			})
 			return
 		}
+		logging.WithFields(
+			logging.F("server_name", serverName),
+			logging.F("pod", pod.Name),
+		).Debug("World saved successfully before stopping")
 	}
 
 	// Scale deployment to 0
 	if err := kubernetes.SetDeploymentReplicas(config.DefaultNamespace, deploymentName, 0); err != nil {
+		logging.WithFields(
+			logging.F("server_name", serverName),
+			logging.F("deployment", deploymentName),
+			logging.F("error", err.Error()),
+		).Error("Failed to scale deployment to 0")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":          "Failed to scale deployment: " + err.Error(),
 			"deploymentName": deploymentName,
 		})
 		return
 	}
+
+	logging.WithFields(
+		logging.F("server_name", serverName),
+		logging.F("deployment", deploymentName),
+		logging.F("user_id", userID),
+		logging.F("username", username),
+	).Info("Minecraft server stopped successfully")
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":        "Server stopped (deployment scaled to 0), data retained",
@@ -273,20 +381,55 @@ func StopMinecraftServerHandler(c *gin.Context) {
 func StartStoppedServerHandler(c *gin.Context) {
 	deploymentName, _ := kubernetes.GetServerInfo(c)
 
+	// Get current user for logging
+	user, _ := auth.GetCurrentUser(c)
+	userID := int64(0)
+	username := "unknown"
+	if user != nil {
+		userID = user.ID
+		username = user.Username
+	}
+
+	serverName := c.Param("serverName")
+
+	logging.WithFields(
+		logging.F("server_name", serverName),
+		logging.F("deployment", deploymentName),
+		logging.F("user_id", userID),
+		logging.F("username", username),
+		logging.F("remote_ip", c.ClientIP()),
+	).Info("Starting stopped Minecraft server")
+
 	// Check if the deployment exists
 	_, ok := kubernetes.CheckDeploymentExists(c, config.DefaultNamespace, deploymentName)
 	if !ok {
+		logging.WithFields(
+			logging.F("server_name", serverName),
+			logging.F("deployment", deploymentName),
+		).Warn("Deployment not found for start operation")
 		return
 	}
 
 	// Scale deployment to 1
 	if err := kubernetes.SetDeploymentReplicas(config.DefaultNamespace, deploymentName, 1); err != nil {
+		logging.WithFields(
+			logging.F("server_name", serverName),
+			logging.F("deployment", deploymentName),
+			logging.F("error", err.Error()),
+		).Error("Failed to scale deployment to 1")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":          "Failed to start deployment: " + err.Error(),
 			"deploymentName": deploymentName,
 		})
 		return
 	}
+
+	logging.WithFields(
+		logging.F("server_name", serverName),
+		logging.F("deployment", deploymentName),
+		logging.F("user_id", userID),
+		logging.F("username", username),
+	).Info("Minecraft server started successfully")
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":        "Server starting (deployment scaled to 1)",
@@ -408,15 +551,41 @@ func ExecCommandHandler(c *gin.Context) {
 	serverName := c.Param("serverName")
 	deploymentName := config.DeploymentPrefix + serverName
 
+	// Get current user for logging
+	user, _ := auth.GetCurrentUser(c)
+	userID := int64(0)
+	username := "unknown"
+	if user != nil {
+		userID = user.ID
+		username = user.Username
+	}
+
+	logging.WithFields(
+		logging.F("server_name", serverName),
+		logging.F("deployment", deploymentName),
+		logging.F("user_id", userID),
+		logging.F("username", username),
+		logging.F("remote_ip", c.ClientIP()),
+	).Info("Executing command on Minecraft server")
+
 	// Check if the deployment exists
 	_, ok := kubernetes.CheckDeploymentExists(c, config.DefaultNamespace, deploymentName)
 	if !ok {
+		logging.WithFields(
+			logging.F("server_name", serverName),
+			logging.F("deployment", deploymentName),
+		).Warn("Deployment not found for command execution")
 		return
 	}
 
 	// Get the pod associated with this deployment
 	pod, err := kubernetes.GetMinecraftPod(config.DefaultNamespace, deploymentName)
 	if err != nil || pod == nil {
+		logging.WithFields(
+			logging.F("server_name", serverName),
+			logging.F("deployment", deploymentName),
+			logging.F("error", err),
+		).Error("Failed to find running pod for deployment")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to find running pod for deployment: " + deploymentName,
 		})
@@ -428,9 +597,20 @@ func ExecCommandHandler(c *gin.Context) {
 	//TODO Validate the command
 
 	if err := c.ShouldBindJSON(&req); err != nil {
+		logging.WithFields(
+			logging.F("server_name", serverName),
+			logging.F("error", err.Error()),
+		).Warn("Invalid command request format")
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	logging.WithFields(
+		logging.F("server_name", serverName),
+		logging.F("pod", pod.Name),
+		logging.F("command", req.Command),
+		logging.F("username", username),
+	).Debug("Executing Minecraft command")
 
 	// Prepare the command to send to the console
 	execCommand := "mc-send-to-console " + req.Command
@@ -438,6 +618,12 @@ func ExecCommandHandler(c *gin.Context) {
 	// Execute the command in the pod
 	stdout, stderr, err := kubernetes.ExecuteCommandInPod(pod.Name, config.DefaultNamespace, "minecraft-server", execCommand)
 	if err != nil {
+		logging.WithFields(
+			logging.F("server_name", serverName),
+			logging.F("pod", pod.Name),
+			logging.F("command", req.Command),
+			logging.F("error", err.Error()),
+		).Error("Failed to execute command")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":   "Failed to execute command: " + err.Error(),
 			"stderr":  stderr,
@@ -445,6 +631,13 @@ func ExecCommandHandler(c *gin.Context) {
 		})
 		return
 	}
+
+	logging.WithFields(
+		logging.F("server_name", serverName),
+		logging.F("pod", pod.Name),
+		logging.F("command", req.Command),
+		logging.F("username", username),
+	).Info("Command executed successfully")
 
 	c.JSON(http.StatusOK, gin.H{
 		"stdout":  stdout,

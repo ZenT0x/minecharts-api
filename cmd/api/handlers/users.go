@@ -96,6 +96,11 @@ func GetUserHandler(c *gin.Context) {
 	// Get current user
 	currentUser, ok := auth.GetCurrentUser(c)
 	if !ok {
+		logging.WithFields(
+			logging.F("path", c.Request.URL.Path),
+			logging.F("remote_ip", c.ClientIP()),
+			logging.F("error", "not_authenticated"),
+		).Warn("Get user details failed: user not authenticated")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
 		return
 	}
@@ -104,12 +109,33 @@ func GetUserHandler(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
+		logging.WithFields(
+			logging.F("current_user_id", currentUser.ID),
+			logging.F("username", currentUser.Username),
+			logging.F("requested_id", idStr),
+			logging.F("remote_ip", c.ClientIP()),
+			logging.F("error", "invalid_id_format"),
+		).Warn("Get user details failed: invalid user ID format")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
 		return
 	}
 
+	logging.WithFields(
+		logging.F("current_user_id", currentUser.ID),
+		logging.F("username", currentUser.Username),
+		logging.F("requested_user_id", id),
+		logging.F("remote_ip", c.ClientIP()),
+	).Debug("User details requested")
+
 	// Users can only view their own details unless they're an admin
 	if !currentUser.IsAdmin() && currentUser.ID != id {
+		logging.WithFields(
+			logging.F("current_user_id", currentUser.ID),
+			logging.F("username", currentUser.Username),
+			logging.F("requested_user_id", id),
+			logging.F("remote_ip", c.ClientIP()),
+			logging.F("error", "permission_denied"),
+		).Warn("Get user details failed: non-admin attempting to access another user's details")
 		c.JSON(http.StatusForbidden, gin.H{"error": "Permission denied"})
 		return
 	}
@@ -119,12 +145,31 @@ func GetUserHandler(c *gin.Context) {
 	user, err := db.GetUserByID(c.Request.Context(), id)
 	if err != nil {
 		if err == database.ErrUserNotFound {
+			logging.WithFields(
+				logging.F("current_user_id", currentUser.ID),
+				logging.F("username", currentUser.Username),
+				logging.F("requested_user_id", id),
+				logging.F("error", "user_not_found"),
+			).Warn("Get user details failed: user not found")
 			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 			return
 		}
+		logging.WithFields(
+			logging.F("current_user_id", currentUser.ID),
+			logging.F("username", currentUser.Username),
+			logging.F("requested_user_id", id),
+			logging.F("error", err.Error()),
+		).Error("Get user details failed: database error")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get user"})
 		return
 	}
+
+	logging.WithFields(
+		logging.F("current_user_id", currentUser.ID),
+		logging.F("username", currentUser.Username),
+		logging.F("requested_user_id", id),
+		logging.F("requested_username", user.Username),
+	).Debug("User details retrieved successfully")
 
 	c.JSON(http.StatusOK, gin.H{
 		"id":          user.ID,
@@ -159,6 +204,11 @@ func UpdateUserHandler(c *gin.Context) {
 	// Get current user
 	currentUser, ok := auth.GetCurrentUser(c)
 	if !ok {
+		logging.WithFields(
+			logging.F("path", c.Request.URL.Path),
+			logging.F("remote_ip", c.ClientIP()),
+			logging.F("error", "not_authenticated"),
+		).Warn("Update user failed: user not authenticated")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
 		return
 	}
@@ -167,15 +217,36 @@ func UpdateUserHandler(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
+		logging.WithFields(
+			logging.F("current_user_id", currentUser.ID),
+			logging.F("username", currentUser.Username),
+			logging.F("requested_id", idStr),
+			logging.F("remote_ip", c.ClientIP()),
+			logging.F("error", "invalid_id_format"),
+		).Warn("Update user failed: invalid user ID format")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
 		return
 	}
+
+	logging.WithFields(
+		logging.F("current_user_id", currentUser.ID),
+		logging.F("username", currentUser.Username),
+		logging.F("target_user_id", id),
+		logging.F("remote_ip", c.ClientIP()),
+	).Info("User update requested")
 
 	// Users can only update their own details unless they're an admin
 	isAdmin := currentUser.IsAdmin()
 	isSelf := currentUser.ID == id
 
 	if !isAdmin && !isSelf {
+		logging.WithFields(
+			logging.F("current_user_id", currentUser.ID),
+			logging.F("username", currentUser.Username),
+			logging.F("target_user_id", id),
+			logging.F("remote_ip", c.ClientIP()),
+			logging.F("error", "permission_denied"),
+		).Warn("Update user failed: non-admin attempting to update another user")
 		c.JSON(http.StatusForbidden, gin.H{"error": "Permission denied"})
 		return
 	}
@@ -185,9 +256,21 @@ func UpdateUserHandler(c *gin.Context) {
 	user, err := db.GetUserByID(c.Request.Context(), id)
 	if err != nil {
 		if err == database.ErrUserNotFound {
+			logging.WithFields(
+				logging.F("current_user_id", currentUser.ID),
+				logging.F("username", currentUser.Username),
+				logging.F("target_user_id", id),
+				logging.F("error", "user_not_found"),
+			).Warn("Update user failed: target user not found")
 			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 			return
 		}
+		logging.WithFields(
+			logging.F("current_user_id", currentUser.ID),
+			logging.F("username", currentUser.Username),
+			logging.F("target_user_id", id),
+			logging.F("error", err.Error()),
+		).Error("Update user failed: database error when retrieving user")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get user"})
 		return
 	}
@@ -195,28 +278,52 @@ func UpdateUserHandler(c *gin.Context) {
 	// Parse update request
 	var req UpdateUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		logging.WithFields(
+			logging.F("current_user_id", currentUser.ID),
+			logging.F("username", currentUser.Username),
+			logging.F("target_user_id", id),
+			logging.F("error", err.Error()),
+		).Warn("Update user failed: invalid request format")
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
+	// Log which fields are being updated
+	updateFields := make([]string, 0)
+
 	// Apply updates
 	if req.Username != nil {
+		updateFields = append(updateFields, "username")
 		user.Username = *req.Username
 	}
 
 	if req.Email != nil {
+		updateFields = append(updateFields, "email")
 		user.Email = *req.Email
 	}
 
 	if req.Password != nil {
 		// Only admins or the user themselves can change passwords
 		if !isAdmin && !isSelf {
+			logging.WithFields(
+				logging.F("current_user_id", currentUser.ID),
+				logging.F("username", currentUser.Username),
+				logging.F("target_user_id", id),
+				logging.F("error", "permission_denied"),
+			).Warn("Update user failed: attempt to change password without permission")
 			c.JSON(http.StatusForbidden, gin.H{"error": "Permission denied"})
 			return
 		}
 
+		updateFields = append(updateFields, "password")
 		passwordHash, err := auth.HashPassword(*req.Password)
 		if err != nil {
+			logging.WithFields(
+				logging.F("current_user_id", currentUser.ID),
+				logging.F("username", currentUser.Username),
+				logging.F("target_user_id", id),
+				logging.F("error", err.Error()),
+			).Error("Update user failed: password hashing error")
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to hash password"})
 			return
 		}
@@ -226,26 +333,62 @@ func UpdateUserHandler(c *gin.Context) {
 	if req.Permissions != nil {
 		// Only admins can change permissions
 		if !isAdmin {
+			logging.WithFields(
+				logging.F("current_user_id", currentUser.ID),
+				logging.F("username", currentUser.Username),
+				logging.F("target_user_id", id),
+				logging.F("error", "permission_denied"),
+			).Warn("Update user failed: non-admin attempting to change permissions")
 			c.JSON(http.StatusForbidden, gin.H{"error": "Only administrators can modify permissions"})
 			return
 		}
+		updateFields = append(updateFields, "permissions")
 		user.Permissions = *req.Permissions
 	}
 
 	if req.Active != nil {
 		// Only admins can change active status
 		if !isAdmin {
+			logging.WithFields(
+				logging.F("current_user_id", currentUser.ID),
+				logging.F("username", currentUser.Username),
+				logging.F("target_user_id", id),
+				logging.F("error", "permission_denied"),
+			).Warn("Update user failed: non-admin attempting to change account status")
 			c.JSON(http.StatusForbidden, gin.H{"error": "Only administrators can change account status"})
 			return
 		}
+		updateFields = append(updateFields, "active")
 		user.Active = *req.Active
 	}
 
+	logging.WithFields(
+		logging.F("current_user_id", currentUser.ID),
+		logging.F("username", currentUser.Username),
+		logging.F("target_user_id", id),
+		logging.F("target_username", user.Username),
+		logging.F("updated_fields", updateFields),
+	).Debug("Applying user updates")
+
 	// Update user in database
 	if err := db.UpdateUser(c.Request.Context(), user); err != nil {
+		logging.WithFields(
+			logging.F("current_user_id", currentUser.ID),
+			logging.F("username", currentUser.Username),
+			logging.F("target_user_id", id),
+			logging.F("error", err.Error()),
+		).Error("Update user failed: database error when saving updates")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user"})
 		return
 	}
+
+	logging.WithFields(
+		logging.F("current_user_id", currentUser.ID),
+		logging.F("username", currentUser.Username),
+		logging.F("target_user_id", id),
+		logging.F("target_username", user.Username),
+		logging.F("updated_fields", updateFields),
+	).Info("User updated successfully")
 
 	c.JSON(http.StatusOK, gin.H{
 		"id":          user.ID,

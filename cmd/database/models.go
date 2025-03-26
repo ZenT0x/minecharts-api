@@ -5,6 +5,7 @@
 package database
 
 import (
+	"minecharts/cmd/logging"
 	"time"
 )
 
@@ -52,23 +53,44 @@ type User struct {
 func (u *User) HasPermission(permission int64) bool {
 	// Admin always has all permissions
 	if u.Permissions&PermAdmin != 0 {
+		logging.WithFields(
+			logging.F("user_id", u.ID),
+			logging.F("username", u.Username),
+			logging.F("permission", permission),
+			logging.F("result", true),
+		).Trace("Permission check passed: user is admin")
 		return true
 	}
-	return u.Permissions&permission != 0
+
+	result := u.Permissions&permission != 0
+	logging.WithFields(
+		logging.F("user_id", u.ID),
+		logging.F("username", u.Username),
+		logging.F("permission", permission),
+		logging.F("user_permissions", u.Permissions),
+		logging.F("result", result),
+	).Trace("Permission check completed")
+	return result
 }
 
 // IsAdmin checks if the user is an administrator.
 func (u *User) IsAdmin() bool {
-	return u.HasPermission(PermAdmin)
+	result := u.HasPermission(PermAdmin)
+	logging.WithFields(
+		logging.F("user_id", u.ID),
+		logging.F("username", u.Username),
+		logging.F("is_admin", result),
+	).Trace("Admin check completed")
+	return result
 }
 
 // APIKey represents an API key for machine authentication.
 type APIKey struct {
-	ID          int64     `json:"id"`
-	UserID      int64     `json:"user_id"`
-	Key         string    `json:"key"`
-	Description string    `json:"description"`
-	LastUsed    time.Time `json:"last_used"`
-	ExpiresAt   time.Time `json:"expires_at"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID          int64      `json:"id"`
+	UserID      int64      `json:"user_id"`
+	Key         string     `json:"key"`
+	Description string     `json:"description"`
+	LastUsed    time.Time  `json:"last_used"`
+	ExpiresAt   *time.Time `json:"expires_at,omitempty"` // Make this a pointer to allow null values
+	CreatedAt   time.Time  `json:"created_at"`
 }

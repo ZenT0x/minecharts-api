@@ -5,6 +5,8 @@ import (
 	"encoding/base64"
 	"errors"
 
+	"minecharts/cmd/logging"
+
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -14,35 +16,82 @@ var (
 
 // HashPassword creates a bcrypt hash of the password
 func HashPassword(password string) (string, error) {
+	logging.Debug("Hashing password")
+
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
+		logging.WithFields(
+			logging.F("error", err.Error()),
+			logging.F("bcrypt_cost", bcrypt.DefaultCost),
+		).Error("Failed to hash password")
 		return "", err
 	}
+
+	logging.Debug("Password hashed successfully")
 	return string(hash), nil
 }
 
 // VerifyPassword compares a bcrypt hashed password with its possible plaintext equivalent
 func VerifyPassword(hashedPassword, password string) error {
-	return bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
+	logging.Debug("Verifying password")
+
+	err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
+	if err != nil {
+		logging.WithFields(
+			logging.F("error", err.Error()),
+		).Debug("Password verification failed")
+		return err
+	}
+
+	logging.Debug("Password verification successful")
+	return nil
 }
 
 // GenerateRandomString returns a URL-safe, base64 encoded
 // random string of the specified length
 func GenerateRandomString(length int) (string, error) {
+	logging.WithFields(
+		logging.F("length", length),
+	).Debug("Generating random string")
+
 	b := make([]byte, length)
 	_, err := rand.Read(b)
 	if err != nil {
+		logging.WithFields(
+			logging.F("error", err.Error()),
+			logging.F("length", length),
+		).Error("Failed to generate random string")
 		return "", err
 	}
-	return base64.URLEncoding.EncodeToString(b)[:length], nil
+
+	result := base64.URLEncoding.EncodeToString(b)[:length]
+	logging.WithFields(
+		logging.F("length", length),
+	).Debug("Random string generated successfully")
+
+	return result, nil
 }
 
 // GenerateAPIKey creates a new API key with the specified prefix
 func GenerateAPIKey(prefix string) (string, error) {
+	logging.WithFields(
+		logging.F("prefix", prefix),
+	).Debug("Generating API key")
+
 	randomPart, err := GenerateRandomString(32)
 	if err != nil {
+		logging.WithFields(
+			logging.F("error", err.Error()),
+			logging.F("prefix", prefix),
+		).Error("Failed to generate API key")
 		return "", err
 	}
 
-	return prefix + "." + randomPart, nil
+	apiKey := prefix + "." + randomPart
+	logging.WithFields(
+		logging.F("prefix", prefix),
+		logging.F("key_length", len(apiKey)),
+	).Debug("API key generated successfully")
+
+	return apiKey, nil
 }
