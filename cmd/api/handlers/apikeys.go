@@ -82,7 +82,7 @@ func CreateAPIKeyHandler(c *gin.Context) {
 		UserID:      user.ID,
 		Key:         keyValue,
 		Description: req.Description,
-		ExpiresAt:   req.ExpiresAt,
+		ExpiresAt:   &req.ExpiresAt,
 	}
 
 	db := database.GetDB()
