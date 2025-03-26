@@ -27,6 +27,8 @@ spec:
               value: "/app/data/minecharts.db"
             - name: DATA_DIR
               value: "/app/data"
+            - name: MINECHARTS_LOG_LEVEL
+              value: "debug"
           volumeMounts:
             - name: data-volume
               mountPath: /app/data
