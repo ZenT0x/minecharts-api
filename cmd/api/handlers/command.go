@@ -3,8 +3,10 @@ package handlers
 import (
 	"net/http"
 
+	"minecharts/cmd/auth"
 	"minecharts/cmd/config"
 	"minecharts/cmd/kubernetes"
+	"minecharts/cmd/logging"
 
 	"github.com/gin-gonic/gin"
 
@@ -36,19 +38,51 @@ type StartMinecraftServerRequest struct {
 func StartMinecraftServerHandler(c *gin.Context) {
 	var req StartMinecraftServerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		logging.WithFields(
+			logging.F("error", err.Error()),
+			logging.F("remote_ip", c.ClientIP()),
+		).Warn("Invalid server creation request format")
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+
+	// Get current user for logging
+	user, _ := auth.GetCurrentUser(c)
+	userID := int64(0)
+	username := "unknown"
+	if user != nil {
+		userID = user.ID
+		username = user.Username
 	}
 
 	baseName := req.ServerName
 	deploymentName := config.DeploymentPrefix + baseName
 	pvcName := deploymentName + config.PVCSuffix
 
+	logging.WithFields(
+		logging.F("server_name", baseName),
+		logging.F("deployment", deploymentName),
+		logging.F("pvc", pvcName),
+		logging.F("user_id", userID),
+		logging.F("username", username),
+	).Info("Creating new Minecraft server")
+
 	// Creates the PVC if it doesn't already exist.
 	if err := kubernetes.EnsurePVC(config.DefaultNamespace, pvcName); err != nil {
+		logging.WithFields(
+			logging.F("server_name", baseName),
+			logging.F("pvc", pvcName),
+			logging.F("user_id", userID),
+			logging.F("error", err.Error()),
+		).Error("Failed to ensure PVC")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to ensure PVC: " + err.Error()})
 		return
 	}
+
+	logging.WithFields(
+		logging.F("server_name", baseName),
+		logging.F("pvc", pvcName),
+	).Debug("PVC ensured")
 
 	// Prepares default environment variables.
 	envVars := []corev1.EnvVar{
@@ -71,9 +105,24 @@ func StartMinecraftServerHandler(c *gin.Context) {
 
 	// Creates the deployment with the existing PVC (created if necessary).
 	if err := kubernetes.CreateDeployment(config.DefaultNamespace, deploymentName, pvcName, envVars); err != nil {
+		logging.WithFields(
+			logging.F("server_name", baseName),
+			logging.F("deployment", deploymentName),
+			logging.F("pvc", pvcName),
+			logging.F("user_id", userID),
+			logging.F("error", err.Error()),
+		).Error("Failed to create deployment")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create deployment: " + err.Error()})
 		return
 	}
+
+	logging.WithFields(
+		logging.F("server_name", baseName),
+		logging.F("deployment", deploymentName),
+		logging.F("pvc", pvcName),
+		logging.F("user_id", userID),
+		logging.F("username", username),
+	).Info("Minecraft server created successfully")
 
 	c.JSON(http.StatusOK, gin.H{"message": "Minecraft server started", "deploymentName": deploymentName, "pvcName": pvcName})
 }
@@ -262,15 +311,67 @@ func StartStoppedServerHandler(c *gin.Context) {
 func DeleteMinecraftServerHandler(c *gin.Context) {
 	deploymentName, pvcName := kubernetes.GetServerInfo(c)
 
+	// Get current user for logging
+	user, _ := auth.GetCurrentUser(c)
+	userID := int64(0)
+	username := "unknown"
+	if user != nil {
+		userID = user.ID
+		username = user.Username
+	}
+
+	serverName := c.Param("serverName")
+
+	logging.WithFields(
+		logging.F("server_name", serverName),
+		logging.F("deployment", deploymentName),
+		logging.F("pvc", pvcName),
+		logging.F("user_id", userID),
+		logging.F("username", username),
+		logging.F("remote_ip", c.ClientIP()),
+	).Info("Deleting Minecraft server")
+
 	// Delete the deployment if it exists
-	_ = kubernetes.DeleteDeployment(config.DefaultNamespace, deploymentName)
+	if err := kubernetes.DeleteDeployment(config.DefaultNamespace, deploymentName); err != nil {
+		logging.WithFields(
+			logging.F("server_name", serverName),
+			logging.F("deployment", deploymentName),
+			logging.F("error", err.Error()),
+		).Warn("Error when deleting deployment")
+	} else {
+		logging.Debug("Deployment deleted successfully")
+	}
 
 	// Delete the PVC
-	_ = kubernetes.DeletePVC(config.DefaultNamespace, pvcName)
+	if err := kubernetes.DeletePVC(config.DefaultNamespace, pvcName); err != nil {
+		logging.WithFields(
+			logging.F("server_name", serverName),
+			logging.F("pvc", pvcName),
+			logging.F("error", err.Error()),
+		).Warn("Error when deleting PVC")
+	} else {
+		logging.Debug("PVC deleted successfully")
+	}
 
 	// Clean up network resources
 	serviceName := deploymentName + "-svc"
-	_ = kubernetes.DeleteService(config.DefaultNamespace, serviceName)
+	if err := kubernetes.DeleteService(config.DefaultNamespace, serviceName); err != nil {
+		logging.WithFields(
+			logging.F("server_name", serverName),
+			logging.F("service", serviceName),
+			logging.F("error", err.Error()),
+		).Warn("Error when deleting service")
+	} else {
+		logging.Debug("Service deleted successfully")
+	}
+
+	logging.WithFields(
+		logging.F("server_name", serverName),
+		logging.F("deployment", deploymentName),
+		logging.F("pvc", pvcName),
+		logging.F("user_id", userID),
+		logging.F("username", username),
+	).Info("Minecraft server deleted successfully")
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":        "Deployment, PVC and network resources deleted",

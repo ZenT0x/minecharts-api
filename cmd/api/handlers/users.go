@@ -6,6 +6,7 @@ import (
 
 	"minecharts/cmd/auth"
 	"minecharts/cmd/database"
+	"minecharts/cmd/logging"
 
 	"github.com/gin-gonic/gin"
 )
@@ -33,12 +34,30 @@ type UpdateUserRequest struct {
 // @Failure      500  {object}  map[string]string       "Server error"
 // @Router       /users [get]
 func ListUsersHandler(c *gin.Context) {
+	// Get current admin user for logging
+	adminUser, _ := auth.GetCurrentUser(c)
+
+	logging.WithFields(
+		logging.F("admin_user_id", adminUser.ID),
+		logging.F("username", adminUser.Username),
+		logging.F("remote_ip", c.ClientIP()),
+	).Info("Admin requesting list of all users")
+
 	db := database.GetDB()
 	users, err := db.ListUsers(c.Request.Context())
 	if err != nil {
+		logging.WithFields(
+			logging.F("admin_user_id", adminUser.ID),
+			logging.F("error", err.Error()),
+		).Error("Failed to list users from database")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list users"})
 		return
 	}
+
+	logging.WithFields(
+		logging.F("admin_user_id", adminUser.ID),
+		logging.F("user_count", len(users)),
+	).Debug("Successfully retrieved user list")
 
 	// Convert to a safer format without password hashes
 	response := make([]gin.H, len(users))
@@ -255,11 +274,36 @@ func UpdateUserHandler(c *gin.Context) {
 // @Failure      500  {object}  map[string]string  "Server error"
 // @Router       /users/{id} [delete]
 func DeleteUserHandler(c *gin.Context) {
+	// Get current admin user for logging
+	adminUser, _ := auth.GetCurrentUser(c)
+
 	// Get user ID from URL parameter
 	idStr := c.Param("id")
 	id, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
+		logging.WithFields(
+			logging.F("admin_user_id", adminUser.ID),
+			logging.F("user_id_param", idStr),
+			logging.F("error", "invalid_id_format"),
+		).Warn("Invalid user ID format in delete request")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		return
+	}
+
+	logging.WithFields(
+		logging.F("admin_user_id", adminUser.ID),
+		logging.F("username", adminUser.Username),
+		logging.F("target_user_id", id),
+		logging.F("remote_ip", c.ClientIP()),
+	).Info("Admin attempting to delete user")
+
+	// Don't allow admins to delete themselves
+	if adminUser.ID == id {
+		logging.WithFields(
+			logging.F("admin_user_id", adminUser.ID),
+			logging.F("error", "self_deletion_attempt"),
+		).Warn("Admin attempted to delete their own account")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot delete your own account"})
 		return
 	}
 
@@ -267,12 +311,28 @@ func DeleteUserHandler(c *gin.Context) {
 	db := database.GetDB()
 	if err := db.DeleteUser(c.Request.Context(), id); err != nil {
 		if err == database.ErrUserNotFound {
+			logging.WithFields(
+				logging.F("admin_user_id", adminUser.ID),
+				logging.F("target_user_id", id),
+				logging.F("error", "user_not_found"),
+			).Warn("Deletion failed: user not found")
 			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 			return
 		}
+		logging.WithFields(
+			logging.F("admin_user_id", adminUser.ID),
+			logging.F("target_user_id", id),
+			logging.F("error", err.Error()),
+		).Error("Database error when deleting user")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete user"})
 		return
 	}
+
+	logging.WithFields(
+		logging.F("admin_user_id", adminUser.ID),
+		logging.F("username", adminUser.Username),
+		logging.F("target_user_id", id),
+	).Info("User deleted successfully")
 
 	c.JSON(http.StatusOK, gin.H{"message": "User deleted"})
 }

@@ -5,13 +5,13 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
-	"log"
 	"net/http"
 	"time"
 
 	"minecharts/cmd/auth"
 	"minecharts/cmd/config"
 	"minecharts/cmd/database"
+	"minecharts/cmd/logging"
 
 	"github.com/gin-gonic/gin"
 )
@@ -46,42 +46,66 @@ type RegisterRequest struct {
 func LoginHandler(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		log.Printf("Login error: Invalid request format: %v", err)
+		logging.WithFields(
+			logging.F("error", err.Error()),
+		).Warn("Invalid login request format")
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	log.Printf("Login attempt for username: %s", req.Username)
+	logging.WithFields(
+		logging.F("username", req.Username),
+		logging.F("remote_ip", c.ClientIP()),
+	).Info("Login attempt")
 
 	// Get user from database
 	db := database.GetDB()
-	log.Printf("Using database implementation: %T", db)
+	logging.Debugf("Using database implementation: %T", db)
 
 	user, err := db.GetUserByUsername(c.Request.Context(), req.Username)
 	if err != nil {
 		if err == database.ErrUserNotFound {
-			log.Printf("Login failed: User not found: %s", req.Username)
+			logging.WithFields(
+				logging.F("username", req.Username),
+				logging.F("remote_ip", c.ClientIP()),
+				logging.F("error", "user_not_found"),
+			).Warn("Login failed: user not found")
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username or password"})
 			return
 		}
-		log.Printf("Login error: Database error: %v", err)
+		logging.WithFields(
+			logging.F("username", req.Username),
+			logging.F("error", err.Error()),
+		).Error("Database error during login")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get user"})
 		return
 	}
 
-	log.Printf("User found: ID=%d, Username=%s", user.ID, user.Username)
+	logging.WithFields(
+		logging.F("username", user.Username),
+		logging.F("user_id", user.ID),
+	).Debug("User found during login process")
 
 	// Verify password
 	if err := auth.VerifyPassword(user.PasswordHash, req.Password); err != nil {
-		log.Printf("Login failed: Invalid password for user: %s", req.Username)
+		logging.WithFields(
+			logging.F("username", req.Username),
+			logging.F("remote_ip", c.ClientIP()),
+			logging.F("error", "invalid_password"),
+		).Warn("Login failed: invalid password")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username or password"})
 		return
 	}
 
-	log.Printf("Password verification successful for user: %s", req.Username)
+	logging.Debug("Password verification successful")
 
 	// Check if user is active
 	if !user.Active {
+		logging.WithFields(
+			logging.F("username", req.Username),
+			logging.F("user_id", user.ID),
+			logging.F("error", "account_inactive"),
+		).Warn("Login failed: account inactive")
 		c.JSON(http.StatusForbidden, gin.H{"error": "User account is inactive"})
 		return
 	}
@@ -89,6 +113,11 @@ func LoginHandler(c *gin.Context) {
 	// Generate JWT token
 	token, err := auth.GenerateJWT(user.ID, user.Username, user.Email, user.Permissions)
 	if err != nil {
+		logging.WithFields(
+			logging.F("username", req.Username),
+			logging.F("user_id", user.ID),
+			logging.F("error", err.Error()),
+		).Error("Failed to generate JWT token")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return
 	}
@@ -97,8 +126,18 @@ func LoginHandler(c *gin.Context) {
 	now := time.Now()
 	user.LastLogin = &now
 	if err := db.UpdateUser(c.Request.Context(), user); err != nil {
-		//log.Printf("Failed to update last login time: %v", err)
+		logging.WithFields(
+			logging.F("username", req.Username),
+			logging.F("user_id", user.ID),
+			logging.F("error", err.Error()),
+		).Warn("Failed to update last login time")
 	}
+
+	logging.WithFields(
+		logging.F("username", req.Username),
+		logging.F("user_id", user.ID),
+		logging.F("remote_ip", c.ClientIP()),
+	).Info("Login successful")
 
 	c.JSON(http.StatusOK, gin.H{
 		"token":       token,
@@ -125,13 +164,27 @@ func LoginHandler(c *gin.Context) {
 func RegisterHandler(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		logging.WithFields(
+			logging.F("error", err.Error()),
+			logging.F("remote_ip", c.ClientIP()),
+		).Warn("Invalid registration request format")
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
+	logging.WithFields(
+		logging.F("username", req.Username),
+		logging.F("email", req.Email),
+		logging.F("remote_ip", c.ClientIP()),
+	).Info("User registration attempt")
+
 	// Hash password
 	passwordHash, err := auth.HashPassword(req.Password)
 	if err != nil {
+		logging.WithFields(
+			logging.F("username", req.Username),
+			logging.F("error", err.Error()),
+		).Error("Failed to hash password during registration")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to hash password"})
 		return
 	}
@@ -148,9 +201,20 @@ func RegisterHandler(c *gin.Context) {
 	db := database.GetDB()
 	if err := db.CreateUser(c.Request.Context(), user); err != nil {
 		if err == database.ErrUserExists {
+			logging.WithFields(
+				logging.F("username", req.Username),
+				logging.F("email", req.Email),
+				logging.F("remote_ip", c.ClientIP()),
+				logging.F("error", "user_exists"),
+			).Warn("Registration failed: user already exists")
 			c.JSON(http.StatusConflict, gin.H{"error": "Username or email already exists"})
 			return
 		}
+		logging.WithFields(
+			logging.F("username", req.Username),
+			logging.F("email", req.Email),
+			logging.F("error", err.Error()),
+		).Error("Database error during user registration")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
 		return
 	}
@@ -158,9 +222,21 @@ func RegisterHandler(c *gin.Context) {
 	// Generate JWT token
 	token, err := auth.GenerateJWT(user.ID, user.Username, user.Email, user.Permissions)
 	if err != nil {
+		logging.WithFields(
+			logging.F("username", req.Username),
+			logging.F("user_id", user.ID),
+			logging.F("error", err.Error()),
+		).Error("Failed to generate JWT token during registration")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return
 	}
+
+	logging.WithFields(
+		logging.F("username", req.Username),
+		logging.F("user_id", user.ID),
+		logging.F("email", req.Email),
+		logging.F("remote_ip", c.ClientIP()),
+	).Info("User registration successful")
 
 	c.JSON(http.StatusCreated, gin.H{
 		"token":       token,

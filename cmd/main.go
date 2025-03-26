@@ -1,13 +1,12 @@
 package main
 
 import (
-	"log"
-
 	"minecharts/cmd/api"
 	"minecharts/cmd/config"
 	"minecharts/cmd/database"
 	_ "minecharts/cmd/docs" // Import swagger docs
 	"minecharts/cmd/kubernetes"
+	"minecharts/cmd/logging"
 
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
@@ -37,28 +36,46 @@ import (
 // @description API Key for authentication.
 
 func main() {
-	// Initialize the global Kubernetes clientset from the kubernetes package.
-	if err := kubernetes.Init(); err != nil {
-		log.Fatalf("Failed to initialize Kubernetes client: %v", err)
+	// Initialize logger
+	logging.Init()
+	logger := logging.Logger
+
+	logger.Info("Starting Minecharts API server")
+
+	// Set Gin mode
+	if config.LogLevel == "debug" || config.LogLevel == "trace" {
+		gin.SetMode(gin.DebugMode)
+	} else {
+		gin.SetMode(gin.ReleaseMode)
 	}
 
-	// Initialize the database
+	// Initialize Kubernetes client
+	if err := kubernetes.Init(); err != nil {
+		logger.Fatalf("Failed to initialize Kubernetes client: %v", err)
+	}
+	logger.Info("Kubernetes client initialized")
+
+	// Initialize database
 	if err := database.InitDB(config.DatabaseType, config.DatabaseConnectionString); err != nil {
-		log.Fatalf("Failed to initialize database: %v", err)
+		logger.Fatalf("Failed to initialize database: %v", err)
 	}
 	defer database.GetDB().Close()
+	logger.Info("Database initialized")
 
-	// Create a new Gin router.
+	// Create a new Gin router
 	router := gin.Default()
 
-	// Setup API routes.
+	// Setup API routes
 	api.SetupRoutes(router)
+	logger.Info("API routes configured")
 
-	// Setup Swagger documentation
+	// Setup Swagger endpoint
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	logger.Info("Swagger documentation endpoint enabled at /swagger/index.html")
 
-	// Run the API server on port 8080.
+	// Start the server
+	logger.Info("Starting HTTP server on port 8080")
 	if err := router.Run(":8080"); err != nil {
-		log.Fatalf("Failed to run server: %v", err)
+		logger.Fatalf("Failed to start server: %v", err)
 	}
 }

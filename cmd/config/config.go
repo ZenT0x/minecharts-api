@@ -36,6 +36,9 @@ var (
 
 	// URL Frontend configuration
 	FrontendURL = "http://localhost:3000"
+
+	// Logging configuration
+	LogLevel = getEnv("MINECHARTS_LOG_LEVEL", "info") // Possible values: trace, debug, info, warn, error, fatal, panic
 )
 
 func getEnv(key, fallback string) string {

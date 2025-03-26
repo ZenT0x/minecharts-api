@@ -3,8 +3,9 @@ package database
 import (
 	"context"
 	"database/sql"
-	"log"
 	"time"
+
+	"minecharts/cmd/logging"
 
 	_ "github.com/lib/pq"
 )
@@ -145,26 +146,42 @@ func (p *PostgresDB) GetUserByID(ctx context.Context, id int64) (*User, error) {
 
 // GetUserByUsername retrieves a user by username
 func (p *PostgresDB) GetUserByUsername(ctx context.Context, username string) (*User, error) {
-	log.Printf("Postgres: GetUserByUsername called for username: %s", username)
+	logging.WithFields(
+		logging.F("username", username),
+		logging.F("db_type", "postgres"),
+	).Debug("Getting user by username")
 
 	user := &User{}
 	query := "SELECT id, username, email, password_hash, permissions, active, last_login, created_at, updated_at FROM users WHERE username = $1"
-	log.Printf("Postgres: Executing query: %s with username: %s", query, username)
+
+	logging.WithFields(
+		logging.F("username", username),
+		logging.F("query", query),
+	).Trace("Executing database query")
 
 	err := p.db.QueryRowContext(ctx, query, username).Scan(
 		&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.Permissions,
 		&user.Active, &user.LastLogin, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
-		log.Printf("Postgres: User not found for username: %s", username)
+		logging.WithFields(
+			logging.F("username", username),
+			logging.F("error", "user_not_found"),
+		).Debug("User not found")
 		return nil, ErrUserNotFound
 	}
 	if err != nil {
-		log.Printf("Postgres: Database error in GetUserByUsername: %v", err)
+		logging.WithFields(
+			logging.F("username", username),
+			logging.F("error", err.Error()),
+		).Error("Database error when getting user by username")
 		return nil, err
 	}
 
-	log.Printf("Postgres: Successfully retrieved user: ID=%d, Username=%s", user.ID, user.Username)
+	logging.WithFields(
+		logging.F("username", user.Username),
+		logging.F("user_id", user.ID),
+	).Debug("Successfully retrieved user")
 	return user, nil
 }
 
