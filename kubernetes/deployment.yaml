@@ -31,6 +31,9 @@ spec:
               value: "debug"
             - name: MINECHARTS_LOG_FORMAT
               value: "text"
+            - name: MINECHARTS_TIMEZONE
+              value: "Europe/Paris"
+
           volumeMounts:
             - name: data-volume
               mountPath: /app/data

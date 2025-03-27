@@ -7,6 +7,7 @@ import (
 	_ "minecharts/cmd/docs" // Import swagger docs
 	"minecharts/cmd/kubernetes"
 	"minecharts/cmd/logging"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
@@ -36,9 +37,26 @@ import (
 // @description API Key for authentication.
 
 func main() {
+
 	// Initialize logger
 	logging.Init()
 	logger := logging.Logger
+
+	// Initialize timezone
+	location, err := time.LoadLocation(config.TimeZone)
+	if err != nil {
+		logging.WithFields(
+			logging.F("timezone", config.TimeZone),
+			logging.F("error", err.Error()),
+		).Warn("Failed to load timezone, falling back to UTC")
+		location = time.UTC
+	}
+
+	time.Local = location
+
+	logging.WithFields(
+		logging.F("timezone", config.TimeZone),
+	).Info("Application timezone configured")
 
 	logger.Info("Starting Minecharts API server")
 
