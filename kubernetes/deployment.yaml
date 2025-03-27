@@ -29,6 +29,8 @@ spec:
               value: "/app/data"
             - name: MINECHARTS_LOG_LEVEL
               value: "debug"
+            - name: MINECHARTS_LOG_FORMAT
+              value: "text"
           volumeMounts:
             - name: data-volume
               mountPath: /app/data

@@ -27,10 +27,28 @@ func Init() {
 	// Set output to stdout
 	Logger.SetOutput(os.Stdout)
 
-	// Set log format to JSON
-	Logger.SetFormatter(&logrus.JSONFormatter{
-		TimestampFormat: "2006-01-02T15:04:05.000Z07:00",
-	})
+	// Set log format
+	switch strings.ToLower(config.LogFormat) {
+	case "text":
+		Logger.SetFormatter(&logrus.TextFormatter{
+			DisableColors:    false,
+			DisableTimestamp: false,
+			FullTimestamp:    true,
+			TimestampFormat:  "2006/01/02 15:04:05",
+		})
+	case "json":
+		Logger.SetFormatter(&logrus.JSONFormatter{
+			TimestampFormat: "2006/01/02 15:04:05",
+		})
+	default:
+		Logger.SetFormatter(&logrus.TextFormatter{
+			DisableColors:    false,
+			DisableTimestamp: false,
+			FullTimestamp:    true,
+			TimestampFormat:  "2006/01/02 15:04:05",
+		})
+		Logger.Warnf("Invalid log format %s, using text format", config.LogFormat)
+	}
 
 	// Set log level from configuration
 	level, err := logrus.ParseLevel(strings.ToLower(config.LogLevel))
