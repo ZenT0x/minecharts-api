@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"minecharts/cmd/logging"
@@ -82,6 +83,23 @@ func (s *SQLiteDB) Init() error {
 			logging.F("error", err.Error()),
 		).Error("Failed to create api_keys table")
 		return err
+	}
+
+	_, err = s.db.Exec(`
+    CREATE TABLE IF NOT EXISTS minecraft_servers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        server_name TEXT UNIQUE NOT NULL,
+        deployment_name TEXT NOT NULL,
+        pvc_name TEXT NOT NULL,
+        owner_id INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        created_at TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP NOT NULL,
+        FOREIGN KEY (owner_id) REFERENCES users(id)
+    )
+`)
+	if err != nil {
+		return fmt.Errorf("failed to create minecraft_servers table: %w", err)
 	}
 
 	// Check if we need to create an admin user
@@ -549,4 +567,128 @@ func (s *SQLiteDB) ListAPIKeysByUser(ctx context.Context, userID int64) ([]*APIK
 		logging.F("count", len(keys)),
 	).Debug("Successfully retrieved API keys")
 	return keys, nil
+}
+
+// CreateServerRecord creates a new server record
+func (db *SQLiteDB) CreateServerRecord(ctx context.Context, server *MinecraftServer) error {
+	query := `INSERT INTO minecraft_servers
+              (server_name, deployment_name, pvc_name, owner_id, status, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?)`
+
+	now := time.Now()
+	server.CreatedAt = now
+	server.UpdatedAt = now
+
+	result, err := db.db.ExecContext(ctx, query,
+		server.ServerName,
+		server.DeploymentName,
+		server.PVCName,
+		server.OwnerID,
+		server.Status,
+		server.CreatedAt,
+		server.UpdatedAt,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to create server record: %w", err)
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return fmt.Errorf("failed to get server ID: %w", err)
+	}
+	server.ID = id
+
+	return nil
+}
+
+// GetServerByName gets a server by its name
+func (db *SQLiteDB) GetServerByName(ctx context.Context, serverName string) (*MinecraftServer, error) {
+	query := `SELECT id, server_name, deployment_name, pvc_name, owner_id,
+              status, created_at, updated_at
+              FROM minecraft_servers WHERE server_name = ?`
+
+	var server MinecraftServer
+	err := db.db.QueryRowContext(ctx, query, serverName).Scan(
+		&server.ID,
+		&server.ServerName,
+		&server.DeploymentName,
+		&server.PVCName,
+		&server.OwnerID,
+		&server.Status,
+		&server.CreatedAt,
+		&server.UpdatedAt,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("server not found: %s", serverName)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get server: %w", err)
+	}
+
+	return &server, nil
+}
+
+// ListServersByOwner list servers by owner ID
+func (db *SQLiteDB) ListServersByOwner(ctx context.Context, ownerID int64) ([]*MinecraftServer, error) {
+	query := `SELECT id, server_name, deployment_name, pvc_name, owner_id,
+              status, created_at, updated_at
+              FROM minecraft_servers WHERE owner_id = ?`
+
+	rows, err := db.db.QueryContext(ctx, query, ownerID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list servers: %w", err)
+	}
+	defer rows.Close()
+
+	var servers []*MinecraftServer
+	for rows.Next() {
+		var server MinecraftServer
+		if err := rows.Scan(
+			&server.ID,
+			&server.ServerName,
+			&server.DeploymentName,
+			&server.PVCName,
+			&server.OwnerID,
+			&server.Status,
+			&server.CreatedAt,
+			&server.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan server row: %w", err)
+		}
+		servers = append(servers, &server)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating server rows: %w", err)
+	}
+
+	return servers, nil
+}
+
+// UpdateServerStatus updates the status of a server
+func (db *SQLiteDB) UpdateServerStatus(ctx context.Context, serverName string, status string) error {
+	query := `UPDATE minecraft_servers SET status = ?, updated_at = ? WHERE server_name = ?`
+
+	now := time.Now()
+	_, err := db.db.ExecContext(ctx, query, status, now, serverName)
+	if err != nil {
+		return fmt.Errorf("failed to update server status: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteServerRecord deletes a server record by its name
+func (db *SQLiteDB) DeleteServerRecord(ctx context.Context, serverName string) error {
+	query := `DELETE FROM minecraft_servers WHERE server_name = ?`
+
+	_, err := db.db.ExecContext(ctx, query, serverName)
+	if err != nil {
+		return fmt.Errorf("failed to delete server record: %w", err)
+	}
+
+	return nil
 }

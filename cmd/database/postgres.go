@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"minecharts/cmd/logging"
@@ -78,6 +79,23 @@ func (p *PostgresDB) Init() error {
 			logging.F("error", err.Error()),
 		).Error("Failed to create api_keys table")
 		return err
+	}
+
+	// Create Minecraft servers table
+	_, err = p.db.Exec(`
+    CREATE TABLE IF NOT EXISTS minecraft_servers (
+        id SERIAL PRIMARY KEY,
+        server_name TEXT UNIQUE NOT NULL,
+        deployment_name TEXT NOT NULL,
+        pvc_name TEXT NOT NULL,
+        owner_id INTEGER NOT NULL REFERENCES users(id),
+        status TEXT NOT NULL,
+        created_at TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP NOT NULL
+    )
+`)
+	if err != nil {
+		return fmt.Errorf("failed to create minecraft_servers table: %w", err)
 	}
 
 	// Check if we need to create an admin user
@@ -524,4 +542,123 @@ func (p *PostgresDB) ListAPIKeysByUser(ctx context.Context, userID int64) ([]*AP
 		logging.F("count", len(keys)),
 	).Debug("Successfully retrieved API keys from PostgreSQL")
 	return keys, nil
+}
+
+// CreateServerRecord creates a new Minecraft server record
+func (p *PostgresDB) CreateServerRecord(ctx context.Context, server *MinecraftServer) error {
+	query := `INSERT INTO minecraft_servers
+              (server_name, deployment_name, pvc_name, owner_id, status, created_at, updated_at)
+              VALUES ($1, $2, $3, $4, $5, $6, $7)
+              RETURNING id`
+
+	now := time.Now()
+	server.CreatedAt = now
+	server.UpdatedAt = now
+
+	err := p.db.QueryRowContext(ctx, query,
+		server.ServerName,
+		server.DeploymentName,
+		server.PVCName,
+		server.OwnerID,
+		server.Status,
+		server.CreatedAt,
+		server.UpdatedAt,
+	).Scan(&server.ID)
+
+	if err != nil {
+		return fmt.Errorf("failed to create server record: %w", err)
+	}
+
+	return nil
+}
+
+// GetServerByName gets a Minecraft server by its name
+func (p *PostgresDB) GetServerByName(ctx context.Context, serverName string) (*MinecraftServer, error) {
+	query := `SELECT id, server_name, deployment_name, pvc_name, owner_id,
+              status, created_at, updated_at
+              FROM minecraft_servers WHERE server_name = $1`
+
+	var server MinecraftServer
+	err := p.db.QueryRowContext(ctx, query, serverName).Scan(
+		&server.ID,
+		&server.ServerName,
+		&server.DeploymentName,
+		&server.PVCName,
+		&server.OwnerID,
+		&server.Status,
+		&server.CreatedAt,
+		&server.UpdatedAt,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("server not found: %s", serverName)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get server: %w", err)
+	}
+
+	return &server, nil
+}
+
+// ListServersByOwner list all Minecraft servers by owner ID
+func (p *PostgresDB) ListServersByOwner(ctx context.Context, ownerID int64) ([]*MinecraftServer, error) {
+	query := `SELECT id, server_name, deployment_name, pvc_name, owner_id,
+              status, created_at, updated_at
+              FROM minecraft_servers WHERE owner_id = $1`
+
+	rows, err := p.db.QueryContext(ctx, query, ownerID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list servers: %w", err)
+	}
+	defer rows.Close()
+
+	var servers []*MinecraftServer
+	for rows.Next() {
+		var server MinecraftServer
+		if err := rows.Scan(
+			&server.ID,
+			&server.ServerName,
+			&server.DeploymentName,
+			&server.PVCName,
+			&server.OwnerID,
+			&server.Status,
+			&server.CreatedAt,
+			&server.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan server row: %w", err)
+		}
+		servers = append(servers, &server)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating server rows: %w", err)
+	}
+
+	return servers, nil
+}
+
+// UpdateServerStatus updates the status of a Minecraft server
+func (p *PostgresDB) UpdateServerStatus(ctx context.Context, serverName string, status string) error {
+	query := `UPDATE minecraft_servers SET status = $1, updated_at = $2 WHERE server_name = $3`
+
+	now := time.Now()
+	_, err := p.db.ExecContext(ctx, query, status, now, serverName)
+	if err != nil {
+		return fmt.Errorf("failed to update server status: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteServerRecord deletes a Minecraft server record
+func (p *PostgresDB) DeleteServerRecord(ctx context.Context, serverName string) error {
+	query := `DELETE FROM minecraft_servers WHERE server_name = $1`
+
+	_, err := p.db.ExecContext(ctx, query, serverName)
+	if err != nil {
+		return fmt.Errorf("failed to delete server record: %w", err)
+	}
+
+	return nil
 }

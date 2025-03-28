@@ -37,6 +37,13 @@ type DB interface {
 	DeleteAPIKey(ctx context.Context, id int64) error
 	ListAPIKeysByUser(ctx context.Context, userID int64) ([]*APIKey, error)
 
+	// Server methods
+	CreateServerRecord(ctx context.Context, server *MinecraftServer) error
+	GetServerByName(ctx context.Context, serverName string) (*MinecraftServer, error)
+	ListServersByOwner(ctx context.Context, ownerID int64) ([]*MinecraftServer, error)
+	UpdateServerStatus(ctx context.Context, serverName string, status string) error
+	DeleteServerRecord(ctx context.Context, serverName string) error
+
 	// Database operations
 	Init() error
 	Close() error

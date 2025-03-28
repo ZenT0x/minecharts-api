@@ -35,6 +35,17 @@ var (
 		PermStopServer | PermRestartServer | PermExecCommand | PermViewServer
 )
 
+// APIKey represents an API key for machine authentication.
+type APIKey struct {
+	ID          int64      `json:"id"`
+	UserID      int64      `json:"user_id"`
+	Key         string     `json:"key"`
+	Description string     `json:"description"`
+	LastUsed    time.Time  `json:"last_used"`
+	ExpiresAt   *time.Time `json:"expires_at,omitempty"` // Make this a pointer to allow null values
+	CreatedAt   time.Time  `json:"created_at"`
+}
+
 // User represents a user in the system with their permissions and account details.
 type User struct {
 	ID           int64      `json:"id"`
@@ -46,6 +57,18 @@ type User struct {
 	LastLogin    *time.Time `json:"last_login"`
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
+}
+
+// MinecraftServer represents a Minecraft server record
+type MinecraftServer struct {
+	ID             int64     `json:"id"`
+	ServerName     string    `json:"server_name"`
+	DeploymentName string    `json:"deployment_name"`
+	PVCName        string    `json:"pvc_name"`
+	OwnerID        int64     `json:"owner_id"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+	Status         string    `json:"status"`
 }
 
 // HasPermission checks if the user has the specified permission.
@@ -84,13 +107,41 @@ func (u *User) IsAdmin() bool {
 	return result
 }
 
-// APIKey represents an API key for machine authentication.
-type APIKey struct {
-	ID          int64      `json:"id"`
-	UserID      int64      `json:"user_id"`
-	Key         string     `json:"key"`
-	Description string     `json:"description"`
-	LastUsed    time.Time  `json:"last_used"`
-	ExpiresAt   *time.Time `json:"expires_at,omitempty"` // Make this a pointer to allow null values
-	CreatedAt   time.Time  `json:"created_at"`
+// HasServerPermission checks if the user has the specified permission for a specific server
+// Returns true if any of the following are true:
+// 1. User is an administrator
+// 2. User is the owner of the server
+// 3. User has the specific global permission
+func (u *User) HasServerPermission(serverOwnerID int64, permission int64) bool {
+	// Admin always has all permissions
+	if u.Permissions&PermAdmin != 0 {
+		logging.WithFields(
+			logging.F("user_id", u.ID),
+			logging.F("username", u.Username),
+			logging.F("permission", permission),
+			logging.F("is_admin", true),
+		).Trace("Server permission check passed: user is admin")
+		return true
+	}
+
+	// Server owner has all permissions for their own server
+	if u.ID == serverOwnerID {
+		logging.WithFields(
+			logging.F("user_id", u.ID),
+			logging.F("username", u.Username),
+			logging.F("server_owner_id", serverOwnerID),
+		).Trace("Server permission check passed: user is owner")
+		return true
+	}
+
+	// Otherwise, check specific permission
+	result := u.Permissions&permission != 0
+	logging.WithFields(
+		logging.F("user_id", u.ID),
+		logging.F("username", u.Username),
+		logging.F("permission", permission),
+		logging.F("user_permissions", u.Permissions),
+		logging.F("result", result),
+	).Trace("Server permission check completed")
+	return result
 }

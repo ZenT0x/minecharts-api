@@ -66,13 +66,13 @@ func SetupRoutes(router *gin.Engine) {
 		serverGroup.POST("", auth.RequirePermission(database.PermCreateServer), handlers.StartMinecraftServerHandler)
 
 		// Server operations
-		serverGroup.POST("/:serverName/restart", auth.RequirePermission(database.PermRestartServer), handlers.RestartMinecraftServerHandler)
-		serverGroup.POST("/:serverName/stop", auth.RequirePermission(database.PermStopServer), handlers.StopMinecraftServerHandler)
-		serverGroup.POST("/:serverName/start", auth.RequirePermission(database.PermStartServer), handlers.StartStoppedServerHandler)
-		serverGroup.POST("/:serverName/delete", auth.RequirePermission(database.PermDeleteServer), handlers.DeleteMinecraftServerHandler)
-		serverGroup.POST("/:serverName/exec", auth.RequirePermission(database.PermExecCommand), handlers.ExecCommandHandler)
+		serverGroup.POST("/:serverName/restart", auth.RequireServerPermission(database.PermRestartServer), handlers.RestartMinecraftServerHandler)
+		serverGroup.POST("/:serverName/stop", auth.RequireServerPermission(database.PermStopServer), handlers.StopMinecraftServerHandler)
+		serverGroup.POST("/:serverName/start", auth.RequireServerPermission(database.PermStartServer), handlers.StartStoppedServerHandler)
+		serverGroup.POST("/:serverName/delete", auth.RequireServerPermission(database.PermDeleteServer), handlers.DeleteMinecraftServerHandler)
+		serverGroup.POST("/:serverName/exec", auth.RequireServerPermission(database.PermExecCommand), handlers.ExecCommandHandler)
 
 		// Network exposure endpoint
-		serverGroup.POST("/:serverName/expose", auth.RequirePermission(database.PermCreateServer), handlers.ExposeMinecraftServerHandler)
+		serverGroup.POST("/:serverName/expose", auth.RequireServerPermission(database.PermCreateServer), handlers.ExposeMinecraftServerHandler)
 	}
 }

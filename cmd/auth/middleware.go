@@ -268,6 +268,75 @@ func RequirePermission(permission int64) gin.HandlerFunc {
 	}
 }
 
+// RequireServerPermission checks if the user has permission for the specific server
+func RequireServerPermission(permission int64) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Get current user
+		value, exists := c.Get(AuthUserKey)
+		if !exists {
+			logging.Warn("Permission check failed: user not authenticated")
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+			return
+		}
+
+		user, ok := value.(*database.User)
+		if !ok {
+			logging.Error("Permission check failed: invalid user object")
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Invalid user object"})
+			return
+		}
+
+		// Get server name from URL parameter
+		serverName := c.Param("serverName")
+		if serverName == "" {
+			// If no serverName, use standard permission check
+			if !user.HasPermission(permission) {
+				logging.WithFields(
+					logging.F("user_id", user.ID),
+					logging.F("username", user.Username),
+					logging.F("permission", permission),
+				).Warn("Permission check failed: insufficient permissions")
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Permission denied"})
+				return
+			}
+			c.Next()
+			return
+		}
+
+		// Get server info
+		db := database.GetDB()
+		server, err := db.GetServerByName(c.Request.Context(), serverName)
+		if err != nil {
+			// If server not found in DB but exists in K8s, default to standard permission check
+			if !user.HasPermission(permission) {
+				logging.WithFields(
+					logging.F("user_id", user.ID),
+					logging.F("username", user.Username),
+					logging.F("server_name", serverName),
+				).Warn("Permission check failed: server not found and insufficient permissions")
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Permission denied"})
+				return
+			}
+			c.Next()
+			return
+		}
+
+		// Check permission with ownership logic
+		if !user.HasServerPermission(server.OwnerID, permission) {
+			logging.WithFields(
+				logging.F("user_id", user.ID),
+				logging.F("username", user.Username),
+				logging.F("server_name", serverName),
+				logging.F("server_owner_id", server.OwnerID),
+			).Warn("Server permission check failed")
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Permission denied"})
+			return
+		}
+
+		c.Next()
+	}
+}
+
 // GetCurrentUser retrieves the authenticated user from the Gin context.
 // It returns the user object and a boolean indicating if the user was found.
 func GetCurrentUser(c *gin.Context) (*database.User, bool) {

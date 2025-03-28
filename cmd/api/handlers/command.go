@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"net/http"
+	"time"
 
 	"minecharts/cmd/auth"
 	"minecharts/cmd/config"
+	"minecharts/cmd/database"
 	"minecharts/cmd/kubernetes"
 	"minecharts/cmd/logging"
 
@@ -114,6 +116,27 @@ func StartMinecraftServerHandler(c *gin.Context) {
 		).Error("Failed to create deployment")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create deployment: " + err.Error()})
 		return
+	}
+
+	// After successful deployment creation, record the server in database
+	server := &database.MinecraftServer{
+		ServerName:     baseName,
+		DeploymentName: deploymentName,
+		PVCName:        pvcName,
+		OwnerID:        userID,
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
+		Status:         "running",
+	}
+
+	db := database.GetDB()
+	if err := db.CreateServerRecord(c.Request.Context(), server); err != nil {
+		// Log the error but don't fail the request since the server is already created in K8s
+		logging.WithFields(
+			logging.F("server_name", baseName),
+			logging.F("user_id", userID),
+			logging.F("error", err.Error()),
+		).Error("Failed to record server in database")
 	}
 
 	logging.WithFields(
