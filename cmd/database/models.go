@@ -11,27 +11,27 @@ import (
 
 // Permission flags define the bit flags for user permissions.
 const (
-	PermAdmin         = 1 << iota // Full administrator access
-	PermCreateServer              // Can create new servers
-	PermDeleteServer              // Can delete servers
-	PermStartServer               // Can start servers
-	PermStopServer                // Can stop servers
-	PermRestartServer             // Can restart servers
-	PermExecCommand               // Can execute commands on servers
-	PermViewServer                // Can view server details
+	PermAdmin         int64 = 1 << iota // Full administrator access
+	PermCreateServer                    // Can create new servers
+	PermDeleteServer                    // Can delete servers
+	PermStartServer                     // Can start servers
+	PermStopServer                      // Can stop servers
+	PermRestartServer                   // Can restart servers
+	PermExecCommand                     // Can execute commands on servers
+	PermViewServer                      // Can view server details
 )
 
 // Common permissions groups provide pre-defined combinations of permissions.
 var (
 	// PermAll grants all permissions
-	PermAll = PermAdmin | PermCreateServer | PermDeleteServer | PermStartServer |
+	PermAll int64 = PermAdmin | PermCreateServer | PermDeleteServer | PermStartServer |
 		PermStopServer | PermRestartServer | PermExecCommand | PermViewServer
 
 	// PermReadOnly grants only view permissions
-	PermReadOnly = PermViewServer
+	PermReadOnly int64 = PermViewServer
 
 	// PermOperator grants everything except admin permissions
-	PermOperator = PermCreateServer | PermDeleteServer | PermStartServer |
+	PermOperator int64 = PermCreateServer | PermDeleteServer | PermStartServer |
 		PermStopServer | PermRestartServer | PermExecCommand | PermViewServer
 )
 

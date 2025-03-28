@@ -21,6 +21,17 @@ type UpdateUserRequest struct {
 	Active      *bool   `json:"active" example:"true"`
 }
 
+// PermissionAction represents a single permission action.
+type PermissionAction struct {
+	Permission int64  `json:"permission" binding:"required" example:"128"`
+	Name       string `json:"name" example:"PermViewServer"` // Optionnel, pour la lisibilité
+}
+
+// ModifyPermissionsRequest represents a request to modify user permissions.
+type ModifyPermissionsRequest struct {
+	Permissions []PermissionAction `json:"permissions" binding:"required"`
+}
+
 // ListUsersHandler returns a list of all users (admin only).
 //
 // @Summary      List all users
@@ -478,4 +489,187 @@ func DeleteUserHandler(c *gin.Context) {
 	).Info("User deleted successfully")
 
 	c.JSON(http.StatusOK, gin.H{"message": "User deleted"})
+}
+
+// GrantUserPermissionsHandler grants permissions to a user (admin only).
+//
+// @Summary      Grant permissions to user
+// @Description  Adds specific permissions to a user
+// @Tags         users
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id        path      integer                 true  "User ID"
+// @Param        request   body      ModifyPermissionsRequest true  "Permissions to grant"
+// @Success      200       {object}  map[string]interface{}  "Updated user permissions"
+// @Failure      400       {object}  map[string]string       "Invalid request"
+// @Failure      401       {object}  map[string]string       "Authentication required"
+// @Failure      403       {object}  map[string]string       "Permission denied"
+// @Failure      404       {object}  map[string]string       "User not found"
+// @Failure      500       {object}  map[string]string       "Server error"
+// @Router       /users/{id}/permissions/grant [post]
+func GrantUserPermissionsHandler(c *gin.Context) {
+	// Get admin user
+	adminUser, _ := auth.GetCurrentUser(c)
+
+	// Get user ID
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		return
+	}
+
+	// Parse request
+	var req ModifyPermissionsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Get target user
+	db := database.GetDB()
+	user, err := db.GetUserByID(c.Request.Context(), id)
+	if err != nil {
+		if err == database.ErrUserNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get user"})
+		return
+	}
+
+	// Apply permissions
+	oldPermissions := user.Permissions
+	for _, perm := range req.Permissions {
+		user.Permissions |= perm.Permission
+	}
+
+	// Save updated permissions
+	if err := db.UpdateUser(c.Request.Context(), user); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user"})
+		return
+	}
+
+	logging.WithFields(
+		logging.F("admin_user_id", adminUser.ID),
+		logging.F("admin_username", adminUser.Username),
+		logging.F("target_user_id", id),
+		logging.F("old_permissions", oldPermissions),
+		logging.F("new_permissions", user.Permissions),
+	).Info("User permissions updated successfully")
+
+	c.JSON(http.StatusOK, gin.H{
+		"user_id":         user.ID,
+		"username":        user.Username,
+		"old_permissions": oldPermissions,
+		"new_permissions": user.Permissions,
+	})
+}
+
+// RevokeUserPermissionsHandler revokes permissions from a user (admin only).
+//
+// @Summary      Revoke permissions from user
+// @Description  Removes specific permissions from a user
+// @Tags         users
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id        path      integer                 true  "User ID"
+// @Param        request   body      ModifyPermissionsRequest true  "Permissions to revoke"
+// @Success      200       {object}  map[string]interface{}  "Updated user permissions"
+// @Failure      400       {object}  map[string]string       "Invalid request"
+// @Failure      401       {object}  map[string]string       "Authentication required"
+// @Failure      403       {object}  map[string]string       "Permission denied"
+// @Failure      404       {object}  map[string]string       "User not found"
+// @Failure      500       {object}  map[string]string       "Server error"
+// @Router       /users/{id}/permissions/revoke [post]
+func RevokeUserPermissionsHandler(c *gin.Context) {
+	// Get admin user
+	adminUser, _ := auth.GetCurrentUser(c)
+
+	// Get user ID
+	idStr := c.Param("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		return
+	}
+
+	// Parse request
+	var req ModifyPermissionsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Get target user
+	db := database.GetDB()
+	user, err := db.GetUserByID(c.Request.Context(), id)
+	if err != nil {
+		if err == database.ErrUserNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get user"})
+		return
+	}
+
+	// Revoke permissions
+	oldPermissions := user.Permissions
+	for _, perm := range req.Permissions {
+		user.Permissions &= ^perm.Permission // Retire la permission avec NOT et AND
+	}
+
+	// Save updated permissions
+	if err := db.UpdateUser(c.Request.Context(), user); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user"})
+		return
+	}
+
+	logging.WithFields(
+		logging.F("admin_user_id", adminUser.ID),
+		logging.F("admin_username", adminUser.Username),
+		logging.F("target_user_id", id),
+		logging.F("old_permissions", oldPermissions),
+		logging.F("new_permissions", user.Permissions),
+	).Info("User permissions revoked successfully")
+
+	c.JSON(http.StatusOK, gin.H{
+		"user_id":         user.ID,
+		"username":        user.Username,
+		"old_permissions": oldPermissions,
+		"new_permissions": user.Permissions,
+	})
+}
+
+// GetPermissionsMapHandler returns a mapping of permission values to their names.
+//
+// @Summary      Get permissions map
+// @Description  Returns a mapping of permission values to their names
+// @Tags         users
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {object}  map[string]int64  "Permissions map"
+// @Failure      401  {object}  map[string]string "Authentication required"
+// @Router       /permissions [get]
+func GetPermissionsMapHandler(c *gin.Context) {
+	// Return a map of permission names to their values
+	permissionsMap := map[string]int64{
+		"PermAdmin":         database.PermAdmin,
+		"PermCreateServer":  database.PermCreateServer,
+		"PermDeleteServer":  database.PermDeleteServer,
+		"PermStartServer":   database.PermStartServer,
+		"PermStopServer":    database.PermStopServer,
+		"PermRestartServer": database.PermRestartServer,
+		"PermExecCommand":   database.PermExecCommand,
+		"PermViewServer":    database.PermViewServer,
+	}
+
+	// Add permissions for database access
+	permissionsMap["PermOperator"] = database.PermOperator
+	permissionsMap["PermAll"] = database.PermAll
+	permissionsMap["PermReadOnly"] = database.PermReadOnly
+
+	c.JSON(http.StatusOK, permissionsMap)
 }

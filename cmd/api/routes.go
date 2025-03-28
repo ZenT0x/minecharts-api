@@ -50,7 +50,12 @@ func SetupRoutes(router *gin.Engine) {
 		userGroup.GET("/:id", handlers.GetUserHandler)
 		userGroup.PUT("/:id", handlers.UpdateUserHandler)
 		userGroup.DELETE("/:id", handlers.DeleteUserHandler)
+
+		userGroup.POST("/:id/permissions/grant", auth.RequirePermission(database.PermAdmin), handlers.GrantUserPermissionsHandler)
+		userGroup.POST("/:id/permissions/revoke", auth.RequirePermission(database.PermAdmin), handlers.RevokeUserPermissionsHandler)
 	}
+
+	router.GET("/permissions", auth.JWTMiddleware(), handlers.GetPermissionsMapHandler)
 
 	// Server management endpoints - protected with authentication
 	// First try JWT, then fall back to API key
