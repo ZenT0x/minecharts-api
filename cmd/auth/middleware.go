@@ -213,33 +213,44 @@ func APIKeyMiddleware() gin.HandlerFunc {
 	}
 }
 
+// extractAuthenticatedUser extracts the user from the context and verifies authentication.
+// Returns the user and a boolean indicating if the extraction was successful.
+func extractAuthenticatedUser(c *gin.Context, permission int64) (*database.User, bool) {
+	// Get user from context
+	value, exists := c.Get(AuthUserKey)
+	if !exists {
+		logging.WithFields(
+			logging.F("path", c.Request.URL.Path),
+			logging.F("remote_ip", c.ClientIP()),
+			logging.F("required_permission", permission),
+			logging.F("error", "not_authenticated"),
+		).Warn("Permission check failed: user not authenticated")
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+		return nil, false
+	}
+
+	user, ok := value.(*database.User)
+	if !ok {
+		logging.WithFields(
+			logging.F("path", c.Request.URL.Path),
+			logging.F("remote_ip", c.ClientIP()),
+			logging.F("required_permission", permission),
+			logging.F("error", "invalid_user_object"),
+		).Error("Permission check failed: invalid user object in context")
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Invalid user object in context"})
+		return nil, false
+	}
+
+	return user, true
+}
+
 // RequirePermission checks if the authenticated user has the required permission.
 // It returns a 403 Forbidden response if the user doesn't have the required permission.
 func RequirePermission(permission int64) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Get user from context
-		value, exists := c.Get(AuthUserKey)
-		if !exists {
-			logging.WithFields(
-				logging.F("path", c.Request.URL.Path),
-				logging.F("remote_ip", c.ClientIP()),
-				logging.F("required_permission", permission),
-				logging.F("error", "not_authenticated"),
-			).Warn("Permission check failed: user not authenticated")
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
-			return
-		}
-
-		user, ok := value.(*database.User)
+		user, ok := extractAuthenticatedUser(c, permission)
 		if !ok {
-			logging.WithFields(
-				logging.F("path", c.Request.URL.Path),
-				logging.F("remote_ip", c.ClientIP()),
-				logging.F("required_permission", permission),
-				logging.F("error", "invalid_user_object"),
-			).Error("Permission check failed: invalid user object in context")
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Invalid user object in context"})
-			return
+			return // extractAuthenticatedUser already handled error response
 		}
 
 		// Check permission
@@ -271,19 +282,9 @@ func RequirePermission(permission int64) gin.HandlerFunc {
 // RequireServerPermission checks if the user has permission for the specific server
 func RequireServerPermission(permission int64) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Get current user
-		value, exists := c.Get(AuthUserKey)
-		if !exists {
-			logging.Warn("Permission check failed: user not authenticated")
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
-			return
-		}
-
-		user, ok := value.(*database.User)
+		user, ok := extractAuthenticatedUser(c, permission)
 		if !ok {
-			logging.Error("Permission check failed: invalid user object")
-			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Invalid user object"})
-			return
+			return // extractAuthenticatedUser already handled error response
 		}
 
 		// Get server name from URL parameter
@@ -292,9 +293,12 @@ func RequireServerPermission(permission int64) gin.HandlerFunc {
 			// If no serverName, use standard permission check
 			if !user.HasPermission(permission) {
 				logging.WithFields(
+					logging.F("path", c.Request.URL.Path),
 					logging.F("user_id", user.ID),
 					logging.F("username", user.Username),
+					logging.F("remote_ip", c.ClientIP()),
 					logging.F("permission", permission),
+					logging.F("error", "permission_denied"),
 				).Warn("Permission check failed: insufficient permissions")
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Permission denied"})
 				return
@@ -310,9 +314,12 @@ func RequireServerPermission(permission int64) gin.HandlerFunc {
 			// If server not found in DB but exists in K8s, default to standard permission check
 			if !user.HasPermission(permission) {
 				logging.WithFields(
+					logging.F("path", c.Request.URL.Path),
 					logging.F("user_id", user.ID),
 					logging.F("username", user.Username),
+					logging.F("remote_ip", c.ClientIP()),
 					logging.F("server_name", serverName),
+					logging.F("error", "server_not_found_and_insufficient_permissions"),
 				).Warn("Permission check failed: server not found and insufficient permissions")
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Permission denied"})
 				return
@@ -324,10 +331,13 @@ func RequireServerPermission(permission int64) gin.HandlerFunc {
 		// Check permission with ownership logic
 		if !user.HasServerPermission(server.OwnerID, permission) {
 			logging.WithFields(
+				logging.F("path", c.Request.URL.Path),
 				logging.F("user_id", user.ID),
 				logging.F("username", user.Username),
+				logging.F("remote_ip", c.ClientIP()),
 				logging.F("server_name", serverName),
 				logging.F("server_owner_id", server.OwnerID),
+				logging.F("error", "insufficient_server_permissions"),
 			).Warn("Server permission check failed")
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Permission denied"})
 			return
