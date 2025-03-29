@@ -21,6 +21,7 @@ type Field struct {
 
 // Init initializes the logger with the configured log level
 func Init() {
+	InitStructuredLogging()
 	// Create new logger
 	Logger = logrus.New()
 

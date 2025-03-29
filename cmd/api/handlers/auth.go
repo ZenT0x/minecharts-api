@@ -65,11 +65,7 @@ func LoginHandler(c *gin.Context) {
 	user, err := db.GetUserByUsername(c.Request.Context(), req.Username)
 	if err != nil {
 		if err == database.ErrUserNotFound {
-			logging.WithFields(
-				logging.F("username", req.Username),
-				logging.F("remote_ip", c.ClientIP()),
-				logging.F("error", "user_not_found"),
-			).Warn("Login failed: user not found")
+			logging.Auth.Login.Failed.WithField("username", req.Username).Warn("Login failed: invalid username or password")
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username or password"})
 			return
 		}
