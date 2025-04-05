@@ -2,18 +2,15 @@
 Minecharts is a Go API for managing Minecraft server pods on a Kubernetes cluster using Gin and client-go. It is containerized with Docker and includes Kubernetes manifests for easy deployment.
 
 ## Features
-  - RESTful API with Gin: Manage Minecraft server pods via a clean REST interface.
-  - Kubernetes Integration: Use client-go to interact with your Kubernetes cluster.
-  - Containerized with Docker: Easily build and deploy your application.
-  - Hot Reload with Air: Enjoy a fast development cycle with automatic reloads.
-  - Structured Git Workflow: Includes branches for stable releases, development, and features.
+    - Create and delete Minecraft server instances (pods)
+    - Start, stop, and restart Minecraft server instances
+    - Customize server instances with environment variables
+    - Execute commands in running Minecraft servers
+    - And more to come!
 
 ## Getting Started
 ### Prerequisites
-  - Go (v1.24+)
-  - Docker
-  - A Kubernetes cluster (Minikube, Kind, or cloud provider)
-  - Air (for hot reload, optional)
+    - A Kubernetes cluster (Minikube, Kind, or cloud provider)
 
 ### Installation
 Clone the repository:
@@ -26,28 +23,43 @@ Go into the repository:
 cd minecharts
 ```
 
-Install dependencies:
+Apply the Kubernetes manifests:
 ```bash
-go mod tidy
+kubectl apply -f kubernetes/
 ```
 
-Run the application:
-- Without hot reload:
-    ```bash
-    go run main.go
-    ```
-- With hot reload:
-    ```bash
-    air
-    ```
+### Docker Image
+
+Pull the Docker image:
+```bash
+docker pull ghcr.io/zent0x/minecharts:latest
+```
+
+## Minecraft Server Image
+This project uses the [itzg/docker-minecraft-server Docker](https://github.com/itzg/docker-minecraft-server) image to deploy Minecraft servers in Kubernetes. This image offers extensive customization options through environment variables, allowing you to configure various server types, versions, and plugins.
+
 # Git Workflow
-  - main: Contains stable, production-ready code.
-  - dev: Active development branch.
-  - feature/*: Branches for new features or fixes.
-  - Version branches: For maintaining published versions (e.g., 1.4).
+    - main: Contains stable, production-ready code.
+    - dev: Active development branch.
+    - feature/*: Branches for new features or fixes.
+    - Version branches: For maintaining published versions (e.g., 1.4).
 
 # Roadmap
-  - [ ] Extend API endpoints for full Minecraft server management.
-  - [ ] Develop a Kubernetes operator for automated resource handling.
-  - [ ] Implement CI/CD pipelines for testing and deployment.
-  - [ ] Build a web interface for easier management.
+    - [x] Basic server management
+        - [x] Create/delete Minecraft server instances (pods)
+        - [x] Start/stop/restart Minecraft server instances
+    - [x] Server customization
+        - [x] Support majority of environment variables for Docker image customization
+        - [x] Execute commands in running Minecraft servers
+    - [x] Networking options
+        - [x] ClusterIP (Internal server)
+        - [x] NodePort (Expose server port directly)
+        - [x] LoadBalancer (Get Public IP for server)
+        - [x] MC Router
+    - [ ] User management
+        - [ ] User authentication
+        - [ ] User roles and permissions
+    - [ ] Extend API endpoints for full Minecraft server management
+    - [ ] Develop a Kubernetes operator for automated resource handling
+    - [ ] Implement CI/CD pipelines for testing and deployment
+    - [ ] Build a web interface for easier management

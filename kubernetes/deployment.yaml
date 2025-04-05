@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minecharts
+  namespace: minecharts
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: minecharts
+  template:
+    metadata:
+      labels:
+        app: minecharts
+    spec:
+      serviceAccountName: minecharts
+      containers:
+        - name: minecharts
+          image: ghcr.io/zent0x/minecharts:dev-latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          env:
+            - name: MINECHARTS_DB_TYPE
+              value: "sqlite"
+            - name: MINECHARTS_DB_CONNECTION
+              value: "/app/data/minecharts.db"
+            - name: DATA_DIR
+              value: "/app/data"
+            - name: MINECHARTS_LOG_LEVEL
+              value: "debug"
+            - name: MINECHARTS_LOG_FORMAT
+              value: "text"
+            - name: MINECHARTS_TIMEZONE
+              value: "Europe/Paris"
+
+          volumeMounts:
+            - name: data-volume
+              mountPath: /app/data
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+      volumes:
+        - name: data-volume
+          persistentVolumeClaim:
+            claimName: minecharts-data-pvc

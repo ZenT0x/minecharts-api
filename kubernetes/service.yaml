@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: minecharts
+  namespace: minecharts
+spec:
+  type: NodePort
+  selector:
+    app: minecharts
+  ports:
+  - port: 8080
+    targetPort: 8080
+    nodePort: 30080
+
