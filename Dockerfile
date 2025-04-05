@@ -11,7 +11,7 @@ COPY . .
 RUN go install github.com/swaggo/swag/cmd/swag@latest
 RUN swag init -g cmd/main.go -o cmd/docs
 
-RUN --mount=type=cache,target=/root/.cache/go-build go build -ldflags="-s -w" -o build/minecharts ./cmd
+RUN --mount=type=cache,target=/root/.cache/go-build go build -ldflags="-s -w" -o build/minecharts-api ./cmd
 
 # Stage 2: Create the minimal image using scratch
 FROM alpine:latest
@@ -19,7 +19,7 @@ WORKDIR /app
 
 RUN mkdir -p /app/data && chmod 777 /app/data
 
-COPY --from=builder /app/build/minecharts .
+COPY --from=builder /app/build/minecharts-api .
 
 EXPOSE 8080
-ENTRYPOINT ["./minecharts"]
+ENTRYPOINT ["./minecharts-api"]
