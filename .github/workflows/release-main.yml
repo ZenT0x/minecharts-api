@@ -42,7 +42,9 @@ jobs:
       # Retrieve the new version from package.json.
       - name: Get new version
         id: get_version
-        run: echo "version=$(node -p \"require('./package.json').version\")" >> $GITHUB_OUTPUT
+        run: |
+          VERSION=$(cat package.json | grep version | head -1 | awk -F: '{ print $2 }' | sed 's/[", ]//g')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       # Setup Go with caching using magnetikonline/golang-with-cache@v5.
       - name: Setup Golang with cache
