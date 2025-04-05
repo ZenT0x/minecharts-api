@@ -17,7 +17,6 @@
                 "@semantic-release/commit-analyzer",
                 {
                     "preset": "angular",
-                    "initialVersion": "0.1.0",
                     "releaseRules": [
                         {
                             "type": "feat",
