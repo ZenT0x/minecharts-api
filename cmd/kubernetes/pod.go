@@ -17,10 +17,10 @@ import (
 func GetMinecraftPod(namespace, deploymentName string) (*corev1.Pod, error) {
 	labelSelector := "app=" + deploymentName
 
-	logging.WithFields(
-		logging.F("namespace", namespace),
-		logging.F("deployment_name", deploymentName),
-		logging.F("label_selector", labelSelector),
+	logging.K8s.WithFields(
+		"namespace", namespace,
+		"deployment_name", deploymentName,
+		"label_selector", labelSelector,
 	).Debug("Looking for Minecraft pod with label selector")
 
 	podList, err := Clientset.CoreV1().Pods(namespace).List(context.Background(), metav1.ListOptions{
@@ -28,28 +28,28 @@ func GetMinecraftPod(namespace, deploymentName string) (*corev1.Pod, error) {
 	})
 
 	if err != nil {
-		logging.WithFields(
-			logging.F("namespace", namespace),
-			logging.F("deployment_name", deploymentName),
-			logging.F("error", err.Error()),
+		logging.K8s.WithFields(
+			"namespace", namespace,
+			"deployment_name", deploymentName,
+			"error", err.Error(),
 		).Error("Failed to list pods")
 		return nil, err
 	}
 
 	if len(podList.Items) == 0 {
-		logging.WithFields(
-			logging.F("namespace", namespace),
-			logging.F("deployment_name", deploymentName),
+		logging.K8s.WithFields(
+			"namespace", namespace,
+			"deployment_name", deploymentName,
 		).Warn("No pods found for deployment")
 		return nil, nil // No pods found
 	}
 
 	pod := &podList.Items[0]
-	logging.WithFields(
-		logging.F("namespace", namespace),
-		logging.F("deployment_name", deploymentName),
-		logging.F("pod_name", pod.Name),
-		logging.F("pod_status", pod.Status.Phase),
+	logging.K8s.WithFields(
+		"namespace", namespace,
+		"deployment_name", deploymentName,
+		"pod_name", pod.Name,
+		"pod_status", pod.Status.Phase,
 	).Debug("Found Minecraft pod")
 	return pod, nil
 }
@@ -57,11 +57,11 @@ func GetMinecraftPod(namespace, deploymentName string) (*corev1.Pod, error) {
 // executeCommandInPod executes a command in the specified pod and returns the output.
 // This is a utility function to avoid code duplication across handlers.
 func ExecuteCommandInPod(podName, namespace, containerName, command string) (stdout, stderr string, err error) {
-	logging.WithFields(
-		logging.F("namespace", namespace),
-		logging.F("pod_name", podName),
-		logging.F("container_name", containerName),
-		logging.F("command", command),
+	logging.K8s.WithFields(
+		"namespace", namespace,
+		"pod_name", podName,
+		"container_name", containerName,
+		"command", command,
 	).Debug("Executing command in pod")
 
 	// Prepare the execution request in the pod.
@@ -84,11 +84,11 @@ func ExecuteCommandInPod(podName, namespace, containerName, command string) (std
 	// Execute the command in the pod.
 	exec, err := remotecommand.NewSPDYExecutor(Config, "POST", execReq.URL())
 	if err != nil {
-		logging.WithFields(
-			logging.F("namespace", namespace),
-			logging.F("pod_name", podName),
-			logging.F("container_name", containerName),
-			logging.F("error", err.Error()),
+		logging.K8s.WithFields(
+			"namespace", namespace,
+			"pod_name", podName,
+			"container_name", containerName,
+			"error", err.Error(),
 		).Error("Failed to create SPDY executor")
 		return "", "", err
 	}
@@ -107,23 +107,23 @@ func ExecuteCommandInPod(podName, namespace, containerName, command string) (std
 	stderr = stderrBuf.String()
 
 	if err != nil {
-		logging.WithFields(
-			logging.F("namespace", namespace),
-			logging.F("pod_name", podName),
-			logging.F("container_name", containerName),
-			logging.F("command", command),
-			logging.F("stdout", stdout),
-			logging.F("stderr", stderr),
-			logging.F("error", err.Error()),
+		logging.K8s.WithFields(
+			"namespace", namespace,
+			"pod_name", podName,
+			"container_name", containerName,
+			"command", command,
+			"stdout", stdout,
+			"stderr", stderr,
+			"error", err.Error(),
 		).Error("Command execution failed")
 	} else {
-		logging.WithFields(
-			logging.F("namespace", namespace),
-			logging.F("pod_name", podName),
-			logging.F("container_name", containerName),
-			logging.F("command", command),
-			logging.F("stdout_length", len(stdout)),
-			logging.F("stderr_length", len(stderr)),
+		logging.K8s.WithFields(
+			"namespace", namespace,
+			"pod_name", podName,
+			"container_name", containerName,
+			"command", command,
+			"stdout_length", len(stdout),
+			"stderr_length", len(stderr),
 		).Debug("Command executed successfully")
 	}
 

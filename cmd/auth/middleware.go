@@ -28,10 +28,10 @@ func JWTMiddleware() gin.HandlerFunc {
 		// Get Authorization header
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			logging.WithFields(
-				logging.F("path", c.Request.URL.Path),
-				logging.F("remote_ip", c.ClientIP()),
-				logging.F("error", "missing_auth_header"),
+			logging.Auth.JWT.WithFields(
+				"path", c.Request.URL.Path,
+				"remote_ip", c.ClientIP(),
+				"error", "missing_auth_header",
 			).Warn("Authentication failed: missing Authorization header")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Authorization header is required"})
 			return
@@ -40,10 +40,10 @@ func JWTMiddleware() gin.HandlerFunc {
 		// Check for Bearer token format
 		parts := strings.SplitN(authHeader, " ", 2)
 		if !(len(parts) == 2 && parts[0] == "Bearer") {
-			logging.WithFields(
-				logging.F("path", c.Request.URL.Path),
-				logging.F("remote_ip", c.ClientIP()),
-				logging.F("error", "invalid_auth_format"),
+			logging.Auth.JWT.WithFields(
+				"path", c.Request.URL.Path,
+				"remote_ip", c.ClientIP(),
+				"error", "invalid_auth_format",
 			).Warn("Authentication failed: invalid Authorization header format")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Authorization header format must be 'Bearer {token}'"})
 			return
@@ -53,39 +53,39 @@ func JWTMiddleware() gin.HandlerFunc {
 		claims, err := ValidateJWT(parts[1])
 		if err != nil {
 			if err == ErrExpiredToken {
-				logging.WithFields(
-					logging.F("path", c.Request.URL.Path),
-					logging.F("remote_ip", c.ClientIP()),
-					logging.F("error", "token_expired"),
+				logging.Auth.JWT.WithFields(
+					"path", c.Request.URL.Path,
+					"remote_ip", c.ClientIP(),
+					"error", "token_expired",
 				).Warn("Authentication failed: token expired")
 				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Token has expired"})
 				return
 			}
-			logging.WithFields(
-				logging.F("path", c.Request.URL.Path),
-				logging.F("remote_ip", c.ClientIP()),
-				logging.F("error", "invalid_token"),
-				logging.F("error_details", err.Error()),
+			logging.Auth.JWT.WithFields(
+				"path", c.Request.URL.Path,
+				"remote_ip", c.ClientIP(),
+				"error", "invalid_token",
+				"error_details", err.Error(),
 			).Warn("Authentication failed: invalid token")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
 			return
 		}
 
-		logging.WithFields(
-			logging.F("path", c.Request.URL.Path),
-			logging.F("user_id", claims.UserID),
-			logging.F("username", claims.Username),
+		logging.Auth.JWT.WithFields(
+			"path", c.Request.URL.Path,
+			"user_id", claims.UserID,
+			"username", claims.Username,
 		).Debug("JWT token validated successfully")
 
 		// Get user from database to ensure they still exist and have the right permissions
 		db := database.GetDB()
 		user, err := db.GetUserByID(c.Request.Context(), claims.UserID)
 		if err != nil {
-			logging.WithFields(
-				logging.F("path", c.Request.URL.Path),
-				logging.F("user_id", claims.UserID),
-				logging.F("error", "user_not_found"),
-				logging.F("error_details", err.Error()),
+			logging.Auth.JWT.WithFields(
+				"path", c.Request.URL.Path,
+				"user_id", claims.UserID,
+				"error", "user_not_found",
+				"error_details", err.Error(),
 			).Warn("Authentication failed: user not found")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
 			return
@@ -93,11 +93,11 @@ func JWTMiddleware() gin.HandlerFunc {
 
 		// Check if user is active
 		if !user.Active {
-			logging.WithFields(
-				logging.F("path", c.Request.URL.Path),
-				logging.F("user_id", user.ID),
-				logging.F("username", user.Username),
-				logging.F("error", "account_inactive"),
+			logging.Auth.Session.WithFields(
+				"path", c.Request.URL.Path,
+				"user_id", user.ID,
+				"username", user.Username,
+				"error", "account_inactive",
 			).Warn("Authentication failed: account inactive")
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "User account is inactive"})
 			return
@@ -106,11 +106,11 @@ func JWTMiddleware() gin.HandlerFunc {
 		// Set user in context for handlers to use
 		c.Set(AuthUserKey, user)
 
-		logging.WithFields(
-			logging.F("path", c.Request.URL.Path),
-			logging.F("user_id", user.ID),
-			logging.F("username", user.Username),
-			logging.F("remote_ip", c.ClientIP()),
+		logging.Auth.Session.WithFields(
+			"path", c.Request.URL.Path,
+			"user_id", user.ID,
+			"username", user.Username,
+			"remote_ip", c.ClientIP(),
 		).Debug("User authenticated successfully via JWT")
 
 		c.Next()
@@ -130,10 +130,10 @@ func APIKeyMiddleware() gin.HandlerFunc {
 		// Get API key from header
 		apiKey := c.GetHeader("X-API-Key")
 		if apiKey == "" {
-			logging.WithFields(
-				logging.F("path", c.Request.URL.Path),
-				logging.F("remote_ip", c.ClientIP()),
-				logging.F("error", "missing_api_key"),
+			logging.API.InvalidRequest.WithFields(
+				"path", c.Request.URL.Path,
+				"remote_ip", c.ClientIP(),
+				"error", "missing_api_key",
 			).Warn("API key authentication failed: missing API key")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "API key is required"})
 			return
@@ -143,29 +143,29 @@ func APIKeyMiddleware() gin.HandlerFunc {
 		db := database.GetDB()
 		key, err := db.GetAPIKey(c.Request.Context(), apiKey)
 		if err != nil {
-			logging.WithFields(
-				logging.F("path", c.Request.URL.Path),
-				logging.F("remote_ip", c.ClientIP()),
-				logging.F("error", "invalid_api_key"),
-				logging.F("error_details", err.Error()),
+			logging.API.Keys.WithFields(
+				"path", c.Request.URL.Path,
+				"remote_ip", c.ClientIP(),
+				"error", "invalid_api_key",
+				"error_details", err.Error(),
 			).Warn("API key authentication failed: invalid API key")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid API key"})
 			return
 		}
 
-		logging.WithFields(
-			logging.F("path", c.Request.URL.Path),
-			logging.F("api_key_id", key.ID),
-			logging.F("user_id", key.UserID),
+		logging.API.Keys.WithFields(
+			"path", c.Request.URL.Path,
+			"api_key_id", key.ID,
+			"user_id", key.UserID,
 		).Debug("API key validated")
 
 		// Check if API key is expired
 		if !key.ExpiresAt.IsZero() && key.ExpiresAt.Before(c.Request.Context().Value("now").(time.Time)) {
-			logging.WithFields(
-				logging.F("path", c.Request.URL.Path),
-				logging.F("api_key_id", key.ID),
-				logging.F("user_id", key.UserID),
-				logging.F("error", "expired_api_key"),
+			logging.API.Keys.WithFields(
+				"path", c.Request.URL.Path,
+				"api_key_id", key.ID,
+				"user_id", key.UserID,
+				"error", "expired_api_key",
 			).Warn("API key authentication failed: expired API key")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "API key has expired"})
 			return
@@ -174,12 +174,12 @@ func APIKeyMiddleware() gin.HandlerFunc {
 		// Get user associated with API key
 		user, err := db.GetUserByID(c.Request.Context(), key.UserID)
 		if err != nil {
-			logging.WithFields(
-				logging.F("path", c.Request.URL.Path),
-				logging.F("api_key_id", key.ID),
-				logging.F("user_id", key.UserID),
-				logging.F("error", "user_not_found"),
-				logging.F("error_details", err.Error()),
+			logging.DB.WithFields(
+				"path", c.Request.URL.Path,
+				"api_key_id", key.ID,
+				"user_id", key.UserID,
+				"error", "user_not_found",
+				"error_details", err.Error(),
 			).Warn("API key authentication failed: user not found")
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
 			return
@@ -187,12 +187,12 @@ func APIKeyMiddleware() gin.HandlerFunc {
 
 		// Check if user is active
 		if !user.Active {
-			logging.WithFields(
-				logging.F("path", c.Request.URL.Path),
-				logging.F("api_key_id", key.ID),
-				logging.F("user_id", user.ID),
-				logging.F("username", user.Username),
-				logging.F("error", "account_inactive"),
+			logging.Auth.Session.WithFields(
+				"path", c.Request.URL.Path,
+				"api_key_id", key.ID,
+				"user_id", user.ID,
+				"username", user.Username,
+				"error", "account_inactive",
 			).Warn("API key authentication failed: account inactive")
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "User account is inactive"})
 			return
@@ -201,12 +201,12 @@ func APIKeyMiddleware() gin.HandlerFunc {
 		// Set user in context for handlers to use
 		c.Set(AuthUserKey, user)
 
-		logging.WithFields(
-			logging.F("path", c.Request.URL.Path),
-			logging.F("api_key_id", key.ID),
-			logging.F("user_id", user.ID),
-			logging.F("username", user.Username),
-			logging.F("remote_ip", c.ClientIP()),
+		logging.Auth.Session.WithFields(
+			"path", c.Request.URL.Path,
+			"api_key_id", key.ID,
+			"user_id", user.ID,
+			"username", user.Username,
+			"remote_ip", c.ClientIP(),
 		).Debug("User authenticated successfully via API key")
 
 		c.Next()
@@ -219,11 +219,11 @@ func extractAuthenticatedUser(c *gin.Context, permission int64) (*database.User,
 	// Get user from context
 	value, exists := c.Get(AuthUserKey)
 	if !exists {
-		logging.WithFields(
-			logging.F("path", c.Request.URL.Path),
-			logging.F("remote_ip", c.ClientIP()),
-			logging.F("required_permission", permission),
-			logging.F("error", "not_authenticated"),
+		logging.API.InvalidRequest.WithFields(
+			"path", c.Request.URL.Path,
+			"remote_ip", c.ClientIP(),
+			"required_permission", permission,
+			"error", "not_authenticated",
 		).Warn("Permission check failed: user not authenticated")
 		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
 		return nil, false
@@ -231,11 +231,11 @@ func extractAuthenticatedUser(c *gin.Context, permission int64) (*database.User,
 
 	user, ok := value.(*database.User)
 	if !ok {
-		logging.WithFields(
-			logging.F("path", c.Request.URL.Path),
-			logging.F("remote_ip", c.ClientIP()),
-			logging.F("required_permission", permission),
-			logging.F("error", "invalid_user_object"),
+		logging.API.InvalidRequest.WithFields(
+			"path", c.Request.URL.Path,
+			"remote_ip", c.ClientIP(),
+			"required_permission", permission,
+			"error", "invalid_user_object",
 		).Error("Permission check failed: invalid user object in context")
 		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Invalid user object in context"})
 		return nil, false
@@ -255,25 +255,25 @@ func RequirePermission(permission int64) gin.HandlerFunc {
 
 		// Check permission
 		if !user.HasPermission(permission) {
-			logging.WithFields(
-				logging.F("path", c.Request.URL.Path),
-				logging.F("user_id", user.ID),
-				logging.F("username", user.Username),
-				logging.F("remote_ip", c.ClientIP()),
-				logging.F("required_permission", permission),
-				logging.F("user_permissions", user.Permissions),
-				logging.F("error", "permission_denied"),
+			logging.Auth.Session.WithFields(
+				"path", c.Request.URL.Path,
+				"user_id", user.ID,
+				"username", user.Username,
+				"remote_ip", c.ClientIP(),
+				"required_permission", permission,
+				"user_permissions", user.Permissions,
+				"error", "permission_denied",
 			).Warn("Permission check failed: insufficient permissions")
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Permission denied"})
 			return
 		}
 
-		logging.WithFields(
-			logging.F("path", c.Request.URL.Path),
-			logging.F("user_id", user.ID),
-			logging.F("username", user.Username),
-			logging.F("required_permission", permission),
-		).Trace("Permission check passed")
+		logging.Auth.Session.WithFields(
+			"path", c.Request.URL.Path,
+			"user_id", user.ID,
+			"username", user.Username,
+			"required_permission", permission,
+		).Debug("Permission check passed")
 
 		c.Next()
 	}
@@ -292,13 +292,13 @@ func RequireServerPermission(permission int64) gin.HandlerFunc {
 		if serverName == "" {
 			// If no serverName, use standard permission check
 			if !user.HasPermission(permission) {
-				logging.WithFields(
-					logging.F("path", c.Request.URL.Path),
-					logging.F("user_id", user.ID),
-					logging.F("username", user.Username),
-					logging.F("remote_ip", c.ClientIP()),
-					logging.F("permission", permission),
-					logging.F("error", "permission_denied"),
+				logging.Auth.Session.WithFields(
+					"path", c.Request.URL.Path,
+					"user_id", user.ID,
+					"username", user.Username,
+					"remote_ip", c.ClientIP(),
+					"permission", permission,
+					"error", "permission_denied",
 				).Warn("Permission check failed: insufficient permissions")
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Permission denied"})
 				return
@@ -313,13 +313,13 @@ func RequireServerPermission(permission int64) gin.HandlerFunc {
 		if err != nil {
 			// If server not found in DB but exists in K8s, default to standard permission check
 			if !user.HasPermission(permission) {
-				logging.WithFields(
-					logging.F("path", c.Request.URL.Path),
-					logging.F("user_id", user.ID),
-					logging.F("username", user.Username),
-					logging.F("remote_ip", c.ClientIP()),
-					logging.F("server_name", serverName),
-					logging.F("error", "server_not_found_and_insufficient_permissions"),
+				logging.Auth.Session.WithFields(
+					"path", c.Request.URL.Path,
+					"user_id", user.ID,
+					"username", user.Username,
+					"remote_ip", c.ClientIP(),
+					"server_name", serverName,
+					"error", "server_not_found_and_insufficient_permissions",
 				).Warn("Permission check failed: server not found and insufficient permissions")
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Permission denied"})
 				return
@@ -330,14 +330,14 @@ func RequireServerPermission(permission int64) gin.HandlerFunc {
 
 		// Check permission with ownership logic
 		if !user.HasServerPermission(server.OwnerID, permission) {
-			logging.WithFields(
-				logging.F("path", c.Request.URL.Path),
-				logging.F("user_id", user.ID),
-				logging.F("username", user.Username),
-				logging.F("remote_ip", c.ClientIP()),
-				logging.F("server_name", serverName),
-				logging.F("server_owner_id", server.OwnerID),
-				logging.F("error", "insufficient_server_permissions"),
+			logging.Auth.Session.WithFields(
+				"path", c.Request.URL.Path,
+				"user_id", user.ID,
+				"username", user.Username,
+				"remote_ip", c.ClientIP(),
+				"server_name", serverName,
+				"server_owner_id", server.OwnerID,
+				"error", "insufficient_server_permissions",
 			).Warn("Server permission check failed")
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Permission denied"})
 			return

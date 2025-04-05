@@ -47,23 +47,23 @@ type OAuthUserInfo struct {
 
 // NewAuthentikProvider creates a new OAuth provider for Authentik
 func NewAuthentikProvider() (*OAuthProvider, error) {
-	logging.Debug("Initializing Authentik OAuth provider")
+	logging.Auth.OAuth.Debug("Initializing Authentik OAuth provider")
 
 	if !config.OAuthEnabled || !config.AuthentikEnabled {
-		logging.WithFields(
-			logging.F("oauth_enabled", config.OAuthEnabled),
-			logging.F("authentik_enabled", config.AuthentikEnabled),
+		logging.Auth.OAuth.WithFields(
+			"oauth_enabled", config.OAuthEnabled,
+			"authentik_enabled", config.AuthentikEnabled,
 		).Warn("Authentik OAuth is not enabled")
 		return nil, ErrOAuthNotEnabled
 	}
 
 	if config.AuthentikClientID == "" || config.AuthentikClientSecret == "" ||
 		config.AuthentikIssuer == "" || config.AuthentikRedirectURL == "" {
-		logging.WithFields(
-			logging.F("client_id_set", config.AuthentikClientID != ""),
-			logging.F("client_secret_set", config.AuthentikClientSecret != ""),
-			logging.F("issuer_set", config.AuthentikIssuer != ""),
-			logging.F("redirect_url_set", config.AuthentikRedirectURL != ""),
+		logging.Auth.OAuth.WithFields(
+			"client_id_set", config.AuthentikClientID != "",
+			"client_secret_set", config.AuthentikClientSecret != "",
+			"issuer_set", config.AuthentikIssuer != "",
+			"redirect_url_set", config.AuthentikRedirectURL != "",
 		).Error("Authentik OAuth configuration is incomplete")
 		return nil, ErrMissingProviderConfig
 	}
@@ -80,9 +80,9 @@ func NewAuthentikProvider() (*OAuthProvider, error) {
 		},
 	}
 
-	logging.WithFields(
-		logging.F("issuer", config.AuthentikIssuer),
-		logging.F("redirect_url", config.AuthentikRedirectURL),
+	logging.Auth.OAuth.WithFields(
+		"issuer", config.AuthentikIssuer,
+		"redirect_url", config.AuthentikRedirectURL,
 	).Info("Authentik OAuth provider initialized successfully")
 
 	return &OAuthProvider{
@@ -95,9 +95,9 @@ func NewAuthentikProvider() (*OAuthProvider, error) {
 func (p *OAuthProvider) GetAuthURL(state string) string {
 	url := p.Config.AuthCodeURL(state, oauth2.AccessTypeOnline)
 
-	logging.WithFields(
-		logging.F("url", url),
-		logging.F("state", state),
+	logging.Auth.OAuth.WithFields(
+		"url", url,
+		"state", state,
 	).Debug("Generated Authentik OAuth authorization URL")
 
 	return url
@@ -105,19 +105,19 @@ func (p *OAuthProvider) GetAuthURL(state string) string {
 
 // Exchange exchanges the authorization code for a token
 func (p *OAuthProvider) Exchange(ctx context.Context, code string) (*oauth2.Token, error) {
-	logging.Debug("Exchanging OAuth code for token")
+	logging.Auth.OAuth.Debug("Exchanging OAuth code for token")
 
 	token, err := p.Config.Exchange(ctx, code)
 	if err != nil {
-		logging.WithFields(
-			logging.F("error", err.Error()),
+		logging.Auth.OAuth.WithFields(
+			"error", err.Error(),
 		).Error("Failed to exchange OAuth code for token")
 		return nil, err
 	}
 
-	logging.WithFields(
-		logging.F("token_type", token.TokenType),
-		logging.F("expiry", token.Expiry),
+	logging.Auth.OAuth.WithFields(
+		"token_type", token.TokenType,
+		"expiry", token.Expiry,
 	).Debug("Successfully exchanged OAuth code for token")
 
 	return token, nil
@@ -125,7 +125,7 @@ func (p *OAuthProvider) Exchange(ctx context.Context, code string) (*oauth2.Toke
 
 // GetUserInfo retrieves user information from the OAuth provider
 func (p *OAuthProvider) GetUserInfo(ctx context.Context, token *oauth2.Token) (*OAuthUserInfo, error) {
-	logging.Debug("Fetching user info from Authentik")
+	logging.Auth.OAuth.Debug("Fetching user info from Authentik")
 
 	client := p.Config.Client(ctx, token)
 
@@ -168,9 +168,9 @@ func (p *OAuthProvider) GetUserInfo(ctx context.Context, token *oauth2.Token) (*
 		}
 	}
 
-	logging.WithFields(
-		logging.F("provider", "authentik"),
-		logging.F("username", username),
+	logging.Auth.OAuth.WithFields(
+		"provider", "authentik",
+		"username", username,
 	).Debug("Successfully retrieved user info from Authentik")
 
 	return &OAuthUserInfo{
@@ -185,10 +185,10 @@ func (p *OAuthProvider) GetUserInfo(ctx context.Context, token *oauth2.Token) (*
 
 // SyncOAuthUser creates or updates a user based on OAuth information
 func SyncOAuthUser(ctx context.Context, userInfo *OAuthUserInfo) (*database.User, error) {
-	logging.WithFields(
-		logging.F("provider", userInfo.Provider),
-		logging.F("username", userInfo.Username),
-		logging.F("email", userInfo.Email),
+	logging.Auth.OAuth.WithFields(
+		"provider", userInfo.Provider,
+		"username", userInfo.Username,
+		"email", userInfo.Email,
 	).Info("Syncing OAuth user with database")
 
 	db := database.GetDB()
@@ -201,16 +201,16 @@ func SyncOAuthUser(ctx context.Context, userInfo *OAuthUserInfo) (*database.User
 		// Generate a secure random password (user will login via OAuth)
 		randomPassword, err := GenerateRandomString(32)
 		if err != nil {
-			logging.WithFields(
-				logging.F("error", err.Error()),
+			logging.Auth.OAuth.WithFields(
+				"error", err.Error(),
 			).Error("Failed to generate random password for OAuth user")
 			return nil, err
 		}
 
 		passwordHash, err := HashPassword(randomPassword)
 		if err != nil {
-			logging.WithFields(
-				logging.F("error", err.Error()),
+			logging.Auth.OAuth.WithFields(
+				"error", err.Error(),
 			).Error("Failed to hash random password for OAuth user")
 			return nil, err
 		}
@@ -227,24 +227,24 @@ func SyncOAuthUser(ctx context.Context, userInfo *OAuthUserInfo) (*database.User
 		}
 
 		if err := db.CreateUser(ctx, newUser); err != nil {
-			logging.WithFields(
-				logging.F("username", userInfo.Username),
-				logging.F("email", userInfo.Email),
-				logging.F("error", err.Error()),
+			logging.DB.WithFields(
+				"username", userInfo.Username,
+				"email", userInfo.Email,
+				"error", err.Error(),
 			).Error("Failed to create user from OAuth information")
 			return nil, err
 		}
 
-		logging.WithFields(
-			logging.F("user_id", newUser.ID),
-			logging.F("username", newUser.Username),
+		logging.Auth.OAuth.WithFields(
+			"user_id", newUser.ID,
+			"username", newUser.Username,
 		).Info("New user created from OAuth information")
 
 		return newUser, nil
 	} else if err != nil {
-		logging.WithFields(
-			logging.F("username", userInfo.Username),
-			logging.F("error", err.Error()),
+		logging.DB.WithFields(
+			"username", userInfo.Username,
+			"error", err.Error(),
 		).Error("Database error while looking up user by username")
 		return nil, err
 	}
@@ -253,16 +253,16 @@ func SyncOAuthUser(ctx context.Context, userInfo *OAuthUserInfo) (*database.User
 	now := time.Now()
 	user.LastLogin = &now
 	if err := db.UpdateUser(ctx, user); err != nil {
-		logging.WithFields(
-			logging.F("user_id", user.ID),
-			logging.F("username", user.Username),
-			logging.F("error", err.Error()),
+		logging.DB.WithFields(
+			"user_id", user.ID,
+			"username", user.Username,
+			"error", err.Error(),
 		).Warn("Failed to update last login time for OAuth user")
 	}
 
-	logging.WithFields(
-		logging.F("user_id", user.ID),
-		logging.F("username", user.Username),
+	logging.Auth.OAuth.WithFields(
+		"user_id", user.ID,
+		"username", user.Username,
 	).Info("Existing user updated from OAuth information")
 
 	return user, nil

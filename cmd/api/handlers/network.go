@@ -52,22 +52,22 @@ func ExposeMinecraftServerHandler(c *gin.Context) {
 		username = user.Username
 	}
 
-	logging.WithFields(
-		logging.F("server_name", serverName),
-		logging.F("deployment", deploymentName),
-		logging.F("user_id", userID),
-		logging.F("username", username),
-		logging.F("remote_ip", c.ClientIP()),
+	logging.Server.WithFields(
+		"server_name", serverName,
+		"deployment", deploymentName,
+		"user_id", userID,
+		"username", username,
+		"remote_ip", c.ClientIP(),
 	).Info("Expose server request received")
 
 	// Check if the deployment exists
 	_, ok := kubernetes.CheckDeploymentExists(c, config.DefaultNamespace, deploymentName)
 	if !ok {
-		logging.WithFields(
-			logging.F("server_name", serverName),
-			logging.F("deployment", deploymentName),
-			logging.F("user_id", userID),
-			logging.F("error", "deployment_not_found"),
+		logging.Server.WithFields(
+			"server_name", serverName,
+			"deployment", deploymentName,
+			"user_id", userID,
+			"error", "deployment_not_found",
 		).Warn("Server exposure failed: deployment not found")
 		return
 	}
@@ -76,22 +76,22 @@ func ExposeMinecraftServerHandler(c *gin.Context) {
 	var req ExposeServerRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		logging.WithFields(
-			logging.F("server_name", serverName),
-			logging.F("deployment", deploymentName),
-			logging.F("user_id", userID),
-			logging.F("error", err.Error()),
+		logging.API.InvalidRequest.WithFields(
+			"server_name", serverName,
+			"deployment", deploymentName,
+			"user_id", userID,
+			"error", err.Error(),
 		).Warn("Server exposure failed: invalid request body")
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	logging.WithFields(
-		logging.F("server_name", serverName),
-		logging.F("deployment", deploymentName),
-		logging.F("exposure_type", req.ExposureType),
-		logging.F("port", req.Port),
-		logging.F("domain", req.Domain),
+	logging.Server.WithFields(
+		"server_name", serverName,
+		"deployment", deploymentName,
+		"exposure_type", req.ExposureType,
+		"port", req.Port,
+		"domain", req.Domain,
 	).Debug("Processing server exposure request")
 
 	// Validate exposure type
@@ -99,12 +99,12 @@ func ExposeMinecraftServerHandler(c *gin.Context) {
 		req.ExposureType != "NodePort" &&
 		req.ExposureType != "LoadBalancer" &&
 		req.ExposureType != "MCRouter" {
-		logging.WithFields(
-			logging.F("server_name", serverName),
-			logging.F("deployment", deploymentName),
-			logging.F("exposure_type", req.ExposureType),
-			logging.F("user_id", userID),
-			logging.F("error", "invalid_exposure_type"),
+		logging.API.InvalidRequest.WithFields(
+			"server_name", serverName,
+			"deployment", deploymentName,
+			"exposure_type", req.ExposureType,
+			"user_id", userID,
+			"error", "invalid_exposure_type",
 		).Warn("Server exposure failed: invalid exposure type")
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Invalid exposureType. Must be one of: ClusterIP, NodePort, LoadBalancer, MCRouter",
@@ -114,12 +114,12 @@ func ExposeMinecraftServerHandler(c *gin.Context) {
 
 	// Domain is required for MCRouter
 	if req.ExposureType == "MCRouter" && req.Domain == "" {
-		logging.WithFields(
-			logging.F("server_name", serverName),
-			logging.F("deployment", deploymentName),
-			logging.F("exposure_type", req.ExposureType),
-			logging.F("user_id", userID),
-			logging.F("error", "missing_domain"),
+		logging.API.InvalidRequest.WithFields(
+			"server_name", serverName,
+			"deployment", deploymentName,
+			"exposure_type", req.ExposureType,
+			"user_id", userID,
+			"error", "missing_domain",
 		).Warn("Server exposure failed: domain required for MCRouter")
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Domain is required for MCRouter exposure type",
@@ -129,7 +129,7 @@ func ExposeMinecraftServerHandler(c *gin.Context) {
 
 	// Use default Minecraft port if not provided
 	if req.Port <= 0 {
-		logging.Debug("Using default Minecraft port 25565")
+		logging.Server.Debug("Using default Minecraft port 25565")
 		req.Port = 25565
 	}
 
@@ -138,9 +138,9 @@ func ExposeMinecraftServerHandler(c *gin.Context) {
 
 	// Clean up any existing services for this deployment
 	// Ignore errors in case the resources don't exist yet
-	logging.WithFields(
-		logging.F("server_name", serverName),
-		logging.F("service", serviceName),
+	logging.Server.WithFields(
+		"server_name", serverName,
+		"service", serviceName,
 	).Debug("Cleaning up any existing services")
 	_ = kubernetes.DeleteService(config.DefaultNamespace, serviceName)
 
@@ -160,23 +160,23 @@ func ExposeMinecraftServerHandler(c *gin.Context) {
 		serviceType = corev1.ServiceTypeClusterIP
 	}
 
-	logging.WithFields(
-		logging.F("server_name", serverName),
-		logging.F("service", serviceName),
-		logging.F("exposure_type", req.ExposureType),
-		logging.F("service_type", string(serviceType)),
-		logging.F("port", req.Port),
+	logging.Server.WithFields(
+		"server_name", serverName,
+		"service", serviceName,
+		"exposure_type", req.ExposureType,
+		"service_type", string(serviceType),
+		"port", req.Port,
 	).Info("Creating Kubernetes service")
 
 	// Create the service
 	service, err := kubernetes.CreateService(config.DefaultNamespace, deploymentName, serviceType, req.Port, annotations)
 	if err != nil {
-		logging.WithFields(
-			logging.F("server_name", serverName),
-			logging.F("service", serviceName),
-			logging.F("exposure_type", req.ExposureType),
-			logging.F("user_id", userID),
-			logging.F("error", err.Error()),
+		logging.Server.WithFields(
+			"server_name", serverName,
+			"service", serviceName,
+			"exposure_type", req.ExposureType,
+			"user_id", userID,
+			"error", err.Error(),
 		).Error("Failed to create service")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to create service: " + err.Error(),
@@ -215,13 +215,13 @@ func ExposeMinecraftServerHandler(c *gin.Context) {
 		response["note"] = "MCRouter configuration created. Make sure mc-router is deployed in your cluster."
 	}
 
-	logging.WithFields(
-		logging.F("server_name", serverName),
-		logging.F("service", serviceName),
-		logging.F("exposure_type", req.ExposureType),
-		logging.F("service_type", string(serviceType)),
-		logging.F("user_id", userID),
-		logging.F("username", username),
+	logging.Server.WithFields(
+		"server_name", serverName,
+		"service", serviceName,
+		"exposure_type", req.ExposureType,
+		"service_type", string(serviceType),
+		"user_id", userID,
+		"username", username,
 	).Info("Server exposure completed successfully")
 
 	c.JSON(http.StatusOK, response)

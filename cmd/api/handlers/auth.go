@@ -46,62 +46,47 @@ type RegisterRequest struct {
 func LoginHandler(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		logging.WithFields(
-			logging.F("error", err.Error()),
-		).Warn("Invalid login request format")
+		logging.API.InvalidRequest.WithFields("error", err.Error(), "remote_ip", c.ClientIP(), "reason", "invalid_request").
+			Warn("Invalid login request format")
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	logging.WithFields(
-		logging.F("username", req.Username),
-		logging.F("remote_ip", c.ClientIP()),
-	).Info("Login attempt")
+	logging.Auth.Login.WithFields("user", req.Username, "r_ip", c.ClientIP()).Info("User login attempt")
 
 	// Get user from database
 	db := database.GetDB()
-	logging.Debugf("Using database implementation: %T", db)
+	logging.DB.Debug("Using database implementation %T", db)
 
 	user, err := db.GetUserByUsername(c.Request.Context(), req.Username)
 	if err != nil {
 		if err == database.ErrUserNotFound {
-			logging.Auth.Login.Failed.WithField("username", req.Username).Warn("Login failed: invalid username or password")
+			logging.Auth.Login.WithFields("user", req.Username, "r_ip", c.ClientIP(), "reason", "user_not_found").
+				Warn("Login failed: user not found")
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username or password"})
 			return
 		}
-		logging.WithFields(
-			logging.F("username", req.Username),
-			logging.F("error", err.Error()),
-		).Error("Database error during login")
+		logging.DB.WithFields("user", req.Username, "r_ip", c.ClientIP(), "error", err.Error()).Error("Database error during login")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get user"})
 		return
 	}
 
-	logging.WithFields(
-		logging.F("username", user.Username),
-		logging.F("user_id", user.ID),
-	).Debug("User found during login process")
+	logging.DB.WithFields("username", req.Username, "user_id", user.ID).Debug("User found in database")
 
 	// Verify password
 	if err := auth.VerifyPassword(user.PasswordHash, req.Password); err != nil {
-		logging.WithFields(
-			logging.F("username", req.Username),
-			logging.F("remote_ip", c.ClientIP()),
-			logging.F("error", "invalid_password"),
-		).Warn("Login failed: invalid password")
+		logging.Auth.Login.WithFields("username", req.Username, "remote_ip", c.ClientIP(), "reason", "invalid_password").
+			Warn("Login failed: invalid password")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid username or password"})
 		return
 	}
 
-	logging.Debug("Password verification successful")
+	logging.Auth.WithFields("username", req.Username, "user_id", user.ID).Debug("Password verified successfully")
 
 	// Check if user is active
 	if !user.Active {
-		logging.WithFields(
-			logging.F("username", req.Username),
-			logging.F("user_id", user.ID),
-			logging.F("error", "account_inactive"),
-		).Warn("Login failed: account inactive")
+		logging.Auth.Login.WithFields("username", req.Username, "user_id", user.ID, "remote_ip", c.ClientIP(), "reason", "account_inactive").
+			Warn("Login failed: account inactive")
 		c.JSON(http.StatusForbidden, gin.H{"error": "User account is inactive"})
 		return
 	}
@@ -109,11 +94,8 @@ func LoginHandler(c *gin.Context) {
 	// Generate JWT token
 	token, err := auth.GenerateJWT(user.ID, user.Username, user.Email, user.Permissions)
 	if err != nil {
-		logging.WithFields(
-			logging.F("username", req.Username),
-			logging.F("user_id", user.ID),
-			logging.F("error", err.Error()),
-		).Error("Failed to generate JWT token")
+		logging.Auth.JWT.WithFields("username", req.Username, "user_id", user.ID, "error", err.Error()).
+			Error("Failed to generate JWT token")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return
 	}
@@ -122,18 +104,12 @@ func LoginHandler(c *gin.Context) {
 	now := time.Now()
 	user.LastLogin = &now
 	if err := db.UpdateUser(c.Request.Context(), user); err != nil {
-		logging.WithFields(
-			logging.F("username", req.Username),
-			logging.F("user_id", user.ID),
-			logging.F("error", err.Error()),
-		).Warn("Failed to update last login time")
+		logging.DB.WithFields("username", req.Username, "user_id", user.ID, "error", err.Error()).
+			Warn("Failed to update last login time")
 	}
 
-	logging.WithFields(
-		logging.F("username", req.Username),
-		logging.F("user_id", user.ID),
-		logging.F("remote_ip", c.ClientIP()),
-	).Info("Login successful")
+	logging.Auth.Login.WithFields("username", req.Username, "user_id", user.ID, "remote_ip", c.ClientIP()).
+		Info("User login successful")
 
 	c.JSON(http.StatusOK, gin.H{
 		"token":       token,
@@ -160,27 +136,20 @@ func LoginHandler(c *gin.Context) {
 func RegisterHandler(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		logging.WithFields(
-			logging.F("error", err.Error()),
-			logging.F("remote_ip", c.ClientIP()),
-		).Warn("Invalid registration request format")
+		logging.API.InvalidRequest.WithFields("error", err.Error(), "remote_ip", c.ClientIP()).
+			Warn("Invalid registration request format")
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	logging.WithFields(
-		logging.F("username", req.Username),
-		logging.F("email", req.Email),
-		logging.F("remote_ip", c.ClientIP()),
-	).Info("User registration attempt")
+	logging.Auth.Register.WithFields("username", req.Username, "email", req.Email, "remote_ip", c.ClientIP()).
+		Info("User registration attempt")
 
 	// Hash password
 	passwordHash, err := auth.HashPassword(req.Password)
 	if err != nil {
-		logging.WithFields(
-			logging.F("username", req.Username),
-			logging.F("error", err.Error()),
-		).Error("Failed to hash password during registration")
+		logging.Auth.WithFields("username", req.Username, "error", err.Error()).
+			Error("Failed to hash password during registration")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to hash password"})
 		return
 	}
@@ -197,20 +166,13 @@ func RegisterHandler(c *gin.Context) {
 	db := database.GetDB()
 	if err := db.CreateUser(c.Request.Context(), user); err != nil {
 		if err == database.ErrUserExists {
-			logging.WithFields(
-				logging.F("username", req.Username),
-				logging.F("email", req.Email),
-				logging.F("remote_ip", c.ClientIP()),
-				logging.F("error", "user_exists"),
-			).Warn("Registration failed: user already exists")
+			logging.Auth.Register.WithFields("username", req.Username, "email", req.Email, "remote_ip", c.ClientIP(), "reason", "user_exists").
+				Warn("Registration failed: user already exists")
 			c.JSON(http.StatusConflict, gin.H{"error": "Username or email already exists"})
 			return
 		}
-		logging.WithFields(
-			logging.F("username", req.Username),
-			logging.F("email", req.Email),
-			logging.F("error", err.Error()),
-		).Error("Database error during user registration")
+		logging.DB.WithFields("username", req.Username, "email", req.Email, "error", err.Error()).
+			Error("Database error during user registration")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
 		return
 	}
@@ -218,21 +180,14 @@ func RegisterHandler(c *gin.Context) {
 	// Generate JWT token
 	token, err := auth.GenerateJWT(user.ID, user.Username, user.Email, user.Permissions)
 	if err != nil {
-		logging.WithFields(
-			logging.F("username", req.Username),
-			logging.F("user_id", user.ID),
-			logging.F("error", err.Error()),
-		).Error("Failed to generate JWT token during registration")
+		logging.Auth.JWT.WithFields("username", req.Username, "user_id", user.ID, "error", err.Error()).
+			Error("Failed to generate JWT token during registration")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return
 	}
 
-	logging.WithFields(
-		logging.F("username", req.Username),
-		logging.F("user_id", user.ID),
-		logging.F("email", req.Email),
-		logging.F("remote_ip", c.ClientIP()),
-	).Info("User registration successful")
+	logging.Auth.Register.WithFields("username", req.Username, "user_id", user.ID, "email", req.Email, "remote_ip", c.ClientIP()).
+		Info("User registration successful")
 
 	c.JSON(http.StatusCreated, gin.H{
 		"token":       token,
@@ -256,9 +211,14 @@ func RegisterHandler(c *gin.Context) {
 func GetUserInfoHandler(c *gin.Context) {
 	user, ok := auth.GetCurrentUser(c)
 	if !ok {
+		logging.Auth.Session.WithFields("remote_ip", c.ClientIP(), "reason", "not_authenticated").
+			Warn("User info request from unauthenticated user")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not authenticated"})
 		return
 	}
+
+	logging.Auth.Session.WithFields("user_id", user.ID, "username", user.Username, "remote_ip", c.ClientIP()).
+		Debug("User info requested")
 
 	c.JSON(http.StatusOK, gin.H{
 		"user_id":     user.ID,
@@ -296,10 +256,8 @@ func GenerateStateValue() (string, error) {
 func OAuthLoginHandler(c *gin.Context) {
 	// Check if OAuth is enabled
 	if !config.OAuthEnabled {
-		logging.WithFields(
-			logging.F("remote_ip", c.ClientIP()),
-			logging.F("error", "oauth_not_enabled"),
-		).Warn("OAuth login failed: OAuth is not enabled")
+		logging.Auth.OAuth.WithFields("remote_ip", c.ClientIP(), "reason", "oauth_not_enabled").
+			Warn("OAuth login failed: OAuth is not enabled")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "OAuth is not enabled"})
 		return
 	}
@@ -307,28 +265,20 @@ func OAuthLoginHandler(c *gin.Context) {
 	// Get provider from URL parameter
 	provider := c.Param("provider")
 	if provider != "authentik" {
-		logging.WithFields(
-			logging.F("remote_ip", c.ClientIP()),
-			logging.F("provider", provider),
-			logging.F("error", "unsupported_provider"),
-		).Warn("OAuth login failed: unsupported provider")
+		logging.Auth.OAuth.WithFields("remote_ip", c.ClientIP(), "provider", provider, "reason", "unsupported_provider").
+			Warn("OAuth login failed: unsupported provider")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Unsupported OAuth provider"})
 		return
 	}
 
-	logging.WithFields(
-		logging.F("remote_ip", c.ClientIP()),
-		logging.F("provider", provider),
-	).Info("OAuth login flow initiated")
+	logging.Auth.OAuth.WithFields("remote_ip", c.ClientIP(), "provider", provider).
+		Info("OAuth login flow initiated")
 
 	// Initialize OAuth provider
 	oauthProvider, err := auth.NewAuthentikProvider()
 	if err != nil {
-		logging.WithFields(
-			logging.F("remote_ip", c.ClientIP()),
-			logging.F("provider", provider),
-			logging.F("error", err.Error()),
-		).Error("Failed to initialize OAuth provider")
+		logging.Auth.OAuth.WithFields("remote_ip", c.ClientIP(), "provider", provider, "error", err.Error()).
+			Error("Failed to initialize OAuth provider")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to initialize OAuth provider"})
 		return
 	}
@@ -336,11 +286,8 @@ func OAuthLoginHandler(c *gin.Context) {
 	// Generate and store state parameter to prevent CSRF
 	state, err := GenerateStateValue()
 	if err != nil {
-		logging.WithFields(
-			logging.F("remote_ip", c.ClientIP()),
-			logging.F("provider", provider),
-			logging.F("error", err.Error()),
-		).Error("Failed to generate OAuth state parameter")
+		logging.Auth.OAuth.WithFields("remote_ip", c.ClientIP(), "provider", provider, "error", err.Error()).
+			Error("Failed to generate OAuth state parameter")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate state"})
 		return
 	}
@@ -356,18 +303,14 @@ func OAuthLoginHandler(c *gin.Context) {
 		true, // HTTP-only
 	)
 
-	logging.WithFields(
-		logging.F("remote_ip", c.ClientIP()),
-		logging.F("provider", provider),
-	).Debug("OAuth state parameter generated and stored")
+	logging.Auth.OAuth.WithFields("remote_ip", c.ClientIP(), "provider", provider).
+		Debug("OAuth state parameter generated and stored")
 
 	// Redirect to OAuth provider's auth page
 	authURL := oauthProvider.GetAuthURL(state)
 
-	logging.WithFields(
-		logging.F("remote_ip", c.ClientIP()),
-		logging.F("provider", provider),
-	).Info("Redirecting user to OAuth provider")
+	logging.Auth.OAuth.WithFields("remote_ip", c.ClientIP(), "provider", provider).
+		Info("Redirecting user to OAuth provider")
 
 	c.Redirect(http.StatusTemporaryRedirect, authURL)
 }
@@ -388,10 +331,8 @@ func OAuthLoginHandler(c *gin.Context) {
 func OAuthCallbackHandler(c *gin.Context) {
 	// Check if OAuth is enabled
 	if !config.OAuthEnabled {
-		logging.WithFields(
-			logging.F("remote_ip", c.ClientIP()),
-			logging.F("error", "oauth_not_enabled"),
-		).Warn("OAuth callback failed: OAuth is not enabled")
+		logging.Auth.OAuth.WithFields("remote_ip", c.ClientIP(), "reason", "oauth_not_enabled").
+			Warn("OAuth callback failed: OAuth is not enabled")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "OAuth is not enabled"})
 		return
 	}
@@ -399,30 +340,22 @@ func OAuthCallbackHandler(c *gin.Context) {
 	// Get provider from URL parameter
 	provider := c.Param("provider")
 	if provider != "authentik" {
-		logging.WithFields(
-			logging.F("remote_ip", c.ClientIP()),
-			logging.F("provider", provider),
-			logging.F("error", "unsupported_provider"),
-		).Warn("OAuth callback failed: unsupported provider")
+		logging.Auth.OAuth.WithFields("remote_ip", c.ClientIP(), "provider", provider, "reason", "unsupported_provider").
+			Warn("OAuth callback failed: unsupported provider")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Unsupported OAuth provider"})
 		return
 	}
 
-	logging.WithFields(
-		logging.F("remote_ip", c.ClientIP()),
-		logging.F("provider", provider),
-	).Info("OAuth callback received")
+	logging.Auth.OAuth.WithFields("remote_ip", c.ClientIP(), "provider", provider).
+		Info("OAuth callback received")
 
 	// Get code and state from query parameters
 	code := c.Query("code")
 	state := c.Query("state")
 
 	if code == "" {
-		logging.WithFields(
-			logging.F("remote_ip", c.ClientIP()),
-			logging.F("provider", provider),
-			logging.F("error", "missing_code"),
-		).Warn("OAuth callback failed: missing code parameter")
+		logging.Auth.OAuth.WithFields("remote_ip", c.ClientIP(), "provider", provider, "reason", "missing_code").
+			Warn("OAuth callback failed: missing code parameter")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing code parameter"})
 		return
 	}
@@ -430,19 +363,15 @@ func OAuthCallbackHandler(c *gin.Context) {
 	// Retrieve and verify the state from cookie
 	savedState, err := c.Cookie("oauth_state")
 	if err != nil || savedState == "" || savedState != state {
-		logging.WithFields(
-			logging.F("remote_ip", c.ClientIP()),
-			logging.F("provider", provider),
-			logging.F("error", "state_mismatch"),
-			logging.F("have_cookie", savedState != ""),
-			logging.F("state_match", savedState == state),
-		).Warn("OAuth callback failed: invalid state parameter")
+		logging.Auth.OAuth.WithFields("remote_ip", c.ClientIP(), "provider", provider, "reason", "state_mismatch",
+			"have_cookie", savedState != "", "state_match", savedState == state).
+			Warn("OAuth callback failed: invalid state parameter")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid OAuth state parameter"})
 		c.Abort()
 		return
 	}
 
-	logging.Debug("OAuth state verification successful")
+	logging.Auth.OAuth.Debug("OAuth state verification successful")
 
 	// Clear the cookie after use
 	c.SetCookie("oauth_state", "", -1, "/", "", true, true)
@@ -450,11 +379,8 @@ func OAuthCallbackHandler(c *gin.Context) {
 	// Initialize OAuth provider
 	oauthProvider, err := auth.NewAuthentikProvider()
 	if err != nil {
-		logging.WithFields(
-			logging.F("remote_ip", c.ClientIP()),
-			logging.F("provider", provider),
-			logging.F("error", err.Error()),
-		).Error("Failed to initialize OAuth provider during callback")
+		logging.Auth.OAuth.WithFields("remote_ip", c.ClientIP(), "provider", provider, "error", err.Error()).
+			Error("Failed to initialize OAuth provider during callback")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to initialize OAuth provider"})
 		return
 	}
@@ -462,45 +388,31 @@ func OAuthCallbackHandler(c *gin.Context) {
 	// Exchange code for token
 	token, err := oauthProvider.Exchange(context.Background(), code)
 	if err != nil {
-		logging.WithFields(
-			logging.F("remote_ip", c.ClientIP()),
-			logging.F("provider", provider),
-			logging.F("error", err.Error()),
-		).Error("Failed to exchange OAuth code for token")
+		logging.Auth.OAuth.WithFields("remote_ip", c.ClientIP(), "provider", provider, "error", err.Error()).
+			Error("Failed to exchange OAuth code for token")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to exchange OAuth code: " + err.Error()})
 		return
 	}
 
-	logging.Debug("OAuth code successfully exchanged for token")
+	logging.Auth.OAuth.Debug("OAuth code successfully exchanged for token")
 
 	// Get user info from token
 	userInfo, err := oauthProvider.GetUserInfo(context.Background(), token)
 	if err != nil {
-		logging.WithFields(
-			logging.F("remote_ip", c.ClientIP()),
-			logging.F("provider", provider),
-			logging.F("error", err.Error()),
-		).Error("Failed to get user info from OAuth provider")
+		logging.Auth.OAuth.WithFields("remote_ip", c.ClientIP(), "provider", provider, "error", err.Error()).
+			Error("Failed to get user info from OAuth provider")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get user info: " + err.Error()})
 		return
 	}
 
-	logging.WithFields(
-		logging.F("remote_ip", c.ClientIP()),
-		logging.F("provider", provider),
-		logging.F("oauth_username", userInfo.Username),
-		logging.F("oauth_email", userInfo.Email),
-	).Info("Successfully retrieved user info from OAuth provider")
+	logging.Auth.OAuth.WithFields("remote_ip", c.ClientIP(), "provider", provider, "oauth_username", userInfo.Username, "oauth_email", userInfo.Email).
+		Info("Successfully retrieved user info from OAuth provider")
 
 	// Create or update user in database
 	user, err := auth.SyncOAuthUser(c.Request.Context(), userInfo)
 	if err != nil {
-		logging.WithFields(
-			logging.F("remote_ip", c.ClientIP()),
-			logging.F("provider", provider),
-			logging.F("oauth_username", userInfo.Username),
-			logging.F("error", err.Error()),
-		).Error("Failed to sync OAuth user with database")
+		logging.Auth.OAuth.WithFields("remote_ip", c.ClientIP(), "provider", provider, "oauth_username", userInfo.Username, "error", err.Error()).
+			Error("Failed to sync OAuth user with database")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to sync user: " + err.Error()})
 		return
 	}
@@ -508,23 +420,14 @@ func OAuthCallbackHandler(c *gin.Context) {
 	// Generate JWT token
 	jwtToken, err := auth.GenerateJWT(user.ID, user.Username, user.Email, user.Permissions)
 	if err != nil {
-		logging.WithFields(
-			logging.F("remote_ip", c.ClientIP()),
-			logging.F("provider", provider),
-			logging.F("user_id", user.ID),
-			logging.F("username", user.Username),
-			logging.F("error", err.Error()),
-		).Error("Failed to generate JWT token after OAuth authentication")
+		logging.Auth.JWT.WithFields("remote_ip", c.ClientIP(), "provider", provider, "user_id", user.ID, "username", user.Username, "error", err.Error()).
+			Error("Failed to generate JWT token after OAuth authentication")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return
 	}
 
-	logging.WithFields(
-		logging.F("remote_ip", c.ClientIP()),
-		logging.F("provider", provider),
-		logging.F("user_id", user.ID),
-		logging.F("username", user.Username),
-	).Info("OAuth authentication successful, redirecting to frontend")
+	logging.Auth.OAuth.WithFields("remote_ip", c.ClientIP(), "provider", provider, "user_id", user.ID, "username", user.Username).
+		Info("OAuth authentication successful, redirecting to frontend")
 
 	// Redirect to frontend with token
 	frontendRedirectURL := config.FrontendURL + "/oauth-callback?token=" + jwtToken

@@ -141,8 +141,14 @@ func (a *LogAction) WithError(err error) *LogAction {
 	return a
 }
 
-// WithField adds a field without modifying the global instance
-func (a *LogAction) WithField(key string, value interface{}) *LogAction {
+// WithFields adds multiple fields without modifying the global instance
+func (a *LogAction) WithFields(keyvals ...interface{}) *LogAction {
+	// Check for pairs
+	if len(keyvals)%2 != 0 {
+		Logger.Warn("WithFields called with odd number of arguments")
+		return a
+	}
+
 	// Create a copy of LogAction to avoid modifying the original
 	newAction := &LogAction{
 		domain: &LogDomain{
@@ -155,7 +161,43 @@ func (a *LogAction) WithField(key string, value interface{}) *LogAction {
 	// Copy the existing fields
 	copy(newAction.domain.fields, a.domain.fields)
 
-	// Add the new field
-	newAction.domain.fields = append(newAction.domain.fields, F(key, value))
+	// Add all new fields
+	for i := 0; i < len(keyvals); i += 2 {
+		key, ok := keyvals[i].(string)
+		if !ok {
+			Logger.Warnf("WithFields: non-string key %v ignored", keyvals[i])
+			continue
+		}
+		newAction.domain.fields = append(newAction.domain.fields, F(key, keyvals[i+1]))
+	}
+
 	return newAction
+}
+
+// WithFields adds multiple fields to a domain in a single call
+func (d *LogDomain) WithFields(keyvals ...interface{}) *LogDomain {
+	// Check for pairs
+	if len(keyvals)%2 != 0 {
+		Logger.Warn("WithFields called with odd number of arguments")
+		return d
+	}
+
+	// Create a copy to avoid modifying the original domain
+	newDomain := &LogDomain{
+		name:   d.name,
+		fields: make([]Field, len(d.fields)),
+	}
+	copy(newDomain.fields, d.fields)
+
+	// Add all new fields
+	for i := 0; i < len(keyvals); i += 2 {
+		key, ok := keyvals[i].(string)
+		if !ok {
+			Logger.Warnf("WithFields: non-string key %v ignored", keyvals[i])
+			continue
+		}
+		newDomain.fields = append(newDomain.fields, F(key, keyvals[i+1]))
+	}
+
+	return newDomain
 }

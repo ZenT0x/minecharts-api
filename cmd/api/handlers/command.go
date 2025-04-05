@@ -40,9 +40,9 @@ type StartMinecraftServerRequest struct {
 func StartMinecraftServerHandler(c *gin.Context) {
 	var req StartMinecraftServerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		logging.WithFields(
-			logging.F("error", err.Error()),
-			logging.F("remote_ip", c.ClientIP()),
+		logging.API.InvalidRequest.WithFields(
+			"error", err.Error(),
+			"remote_ip", c.ClientIP(),
 		).Warn("Invalid server creation request format")
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -61,29 +61,29 @@ func StartMinecraftServerHandler(c *gin.Context) {
 	deploymentName := config.DeploymentPrefix + baseName
 	pvcName := deploymentName + config.PVCSuffix
 
-	logging.WithFields(
-		logging.F("server_name", baseName),
-		logging.F("deployment", deploymentName),
-		logging.F("pvc", pvcName),
-		logging.F("user_id", userID),
-		logging.F("username", username),
+	logging.Server.WithFields(
+		"server_name", baseName,
+		"deployment", deploymentName,
+		"pvc", pvcName,
+		"user_id", userID,
+		"username", username,
 	).Info("Creating new Minecraft server")
 
 	// Creates the PVC if it doesn't already exist.
 	if err := kubernetes.EnsurePVC(config.DefaultNamespace, pvcName); err != nil {
-		logging.WithFields(
-			logging.F("server_name", baseName),
-			logging.F("pvc", pvcName),
-			logging.F("user_id", userID),
-			logging.F("error", err.Error()),
+		logging.Server.WithFields(
+			"server_name", baseName,
+			"pvc", pvcName,
+			"user_id", userID,
+			"error", err.Error(),
 		).Error("Failed to ensure PVC")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to ensure PVC: " + err.Error()})
 		return
 	}
 
-	logging.WithFields(
-		logging.F("server_name", baseName),
-		logging.F("pvc", pvcName),
+	logging.Server.WithFields(
+		"server_name", baseName,
+		"pvc", pvcName,
 	).Debug("PVC ensured")
 
 	// Prepares default environment variables.
@@ -107,12 +107,12 @@ func StartMinecraftServerHandler(c *gin.Context) {
 
 	// Creates the deployment with the existing PVC (created if necessary).
 	if err := kubernetes.CreateDeployment(config.DefaultNamespace, deploymentName, pvcName, envVars); err != nil {
-		logging.WithFields(
-			logging.F("server_name", baseName),
-			logging.F("deployment", deploymentName),
-			logging.F("pvc", pvcName),
-			logging.F("user_id", userID),
-			logging.F("error", err.Error()),
+		logging.Server.WithFields(
+			"server_name", baseName,
+			"deployment", deploymentName,
+			"pvc", pvcName,
+			"user_id", userID,
+			"error", err.Error(),
 		).Error("Failed to create deployment")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create deployment: " + err.Error()})
 		return
@@ -132,19 +132,19 @@ func StartMinecraftServerHandler(c *gin.Context) {
 	db := database.GetDB()
 	if err := db.CreateServerRecord(c.Request.Context(), server); err != nil {
 		// Log the error but don't fail the request since the server is already created in K8s
-		logging.WithFields(
-			logging.F("server_name", baseName),
-			logging.F("user_id", userID),
-			logging.F("error", err.Error()),
+		logging.DB.WithFields(
+			"server_name", baseName,
+			"user_id", userID,
+			"error", err.Error(),
 		).Error("Failed to record server in database")
 	}
 
-	logging.WithFields(
-		logging.F("server_name", baseName),
-		logging.F("deployment", deploymentName),
-		logging.F("pvc", pvcName),
-		logging.F("user_id", userID),
-		logging.F("username", username),
+	logging.Server.WithFields(
+		"server_name", baseName,
+		"deployment", deploymentName,
+		"pvc", pvcName,
+		"user_id", userID,
+		"username", username,
 	).Info("Minecraft server created successfully")
 
 	c.JSON(http.StatusOK, gin.H{"message": "Minecraft server started", "deploymentName": deploymentName, "pvcName": pvcName})
@@ -179,20 +179,20 @@ func RestartMinecraftServerHandler(c *gin.Context) {
 
 	serverName := c.Param("serverName")
 
-	logging.WithFields(
-		logging.F("server_name", serverName),
-		logging.F("deployment", deploymentName),
-		logging.F("user_id", userID),
-		logging.F("username", username),
-		logging.F("remote_ip", c.ClientIP()),
+	logging.Server.WithFields(
+		"server_name", serverName,
+		"deployment", deploymentName,
+		"user_id", userID,
+		"username", username,
+		"remote_ip", c.ClientIP(),
 	).Info("Restarting Minecraft server")
 
 	// Check if the deployment exists
 	_, ok := kubernetes.CheckDeploymentExists(c, config.DefaultNamespace, deploymentName)
 	if !ok {
-		logging.WithFields(
-			logging.F("server_name", serverName),
-			logging.F("deployment", deploymentName),
+		logging.Server.WithFields(
+			"server_name", serverName,
+			"deployment", deploymentName,
 		).Warn("Deployment not found for restart")
 		return
 	}
@@ -200,10 +200,10 @@ func RestartMinecraftServerHandler(c *gin.Context) {
 	// Get the pod associated with this deployment to run the save command
 	pod, err := kubernetes.GetMinecraftPod(config.DefaultNamespace, deploymentName)
 	if err != nil || pod == nil {
-		logging.WithFields(
-			logging.F("server_name", serverName),
-			logging.F("deployment", deploymentName),
-			logging.F("error", err),
+		logging.Server.WithFields(
+			"server_name", serverName,
+			"deployment", deploymentName,
+			"error", err,
 		).Error("Failed to find pod for deployment")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to find pod for deployment: " + deploymentName,
@@ -211,18 +211,18 @@ func RestartMinecraftServerHandler(c *gin.Context) {
 		return
 	}
 
-	logging.WithFields(
-		logging.F("server_name", serverName),
-		logging.F("pod", pod.Name),
+	logging.Server.WithFields(
+		"server_name", serverName,
+		"pod", pod.Name,
 	).Debug("Found pod for server restart")
 
 	// Save the world
 	stdout, stderr, err := kubernetes.SaveWorld(pod.Name, config.DefaultNamespace)
 	if err != nil {
-		logging.WithFields(
-			logging.F("server_name", serverName),
-			logging.F("pod", pod.Name),
-			logging.F("error", err.Error()),
+		logging.Server.WithFields(
+			"server_name", serverName,
+			"pod", pod.Name,
+			"error", err.Error(),
 		).Error("Failed to save world before restart")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":          "Failed to save world: " + err.Error(),
@@ -231,20 +231,17 @@ func RestartMinecraftServerHandler(c *gin.Context) {
 		return
 	}
 
-	logging.WithFields(
-		logging.F("server_name", serverName),
-		logging.F("pod", pod.Name),
+	logging.Server.WithFields(
+		"server_name", serverName,
+		"pod", pod.Name,
 	).Debug("World saved successfully before restart")
-
-	// Wait a moment for the save to complete
-	// time.Sleep(10 * time.Second)
 
 	// Restart the deployment
 	if err := kubernetes.RestartDeployment(config.DefaultNamespace, deploymentName); err != nil {
-		logging.WithFields(
-			logging.F("server_name", serverName),
-			logging.F("deployment", deploymentName),
-			logging.F("error", err.Error()),
+		logging.Server.WithFields(
+			"server_name", serverName,
+			"deployment", deploymentName,
+			"error", err.Error(),
 		).Error("Failed to restart deployment")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":          "Failed to restart deployment: " + err.Error(),
@@ -253,11 +250,11 @@ func RestartMinecraftServerHandler(c *gin.Context) {
 		return
 	}
 
-	logging.WithFields(
-		logging.F("server_name", serverName),
-		logging.F("deployment", deploymentName),
-		logging.F("user_id", userID),
-		logging.F("username", username),
+	logging.Server.WithFields(
+		"server_name", serverName,
+		"deployment", deploymentName,
+		"user_id", userID,
+		"username", username,
 	).Info("Minecraft server restarted successfully")
 
 	response := gin.H{
@@ -302,20 +299,20 @@ func StopMinecraftServerHandler(c *gin.Context) {
 
 	serverName := c.Param("serverName")
 
-	logging.WithFields(
-		logging.F("server_name", serverName),
-		logging.F("deployment", deploymentName),
-		logging.F("user_id", userID),
-		logging.F("username", username),
-		logging.F("remote_ip", c.ClientIP()),
+	logging.Server.WithFields(
+		"server_name", serverName,
+		"deployment", deploymentName,
+		"user_id", userID,
+		"username", username,
+		"remote_ip", c.ClientIP(),
 	).Info("Stopping Minecraft server")
 
 	// Check if the deployment exists
 	_, ok := kubernetes.CheckDeploymentExists(c, config.DefaultNamespace, deploymentName)
 	if !ok {
-		logging.WithFields(
-			logging.F("server_name", serverName),
-			logging.F("deployment", deploymentName),
+		logging.Server.WithFields(
+			"server_name", serverName,
+			"deployment", deploymentName,
 		).Warn("Deployment not found for stop operation")
 		return
 	}
@@ -323,10 +320,10 @@ func StopMinecraftServerHandler(c *gin.Context) {
 	// Get the pod associated with this deployment to run the save command
 	pod, err := kubernetes.GetMinecraftPod(config.DefaultNamespace, deploymentName)
 	if err != nil {
-		logging.WithFields(
-			logging.F("server_name", serverName),
-			logging.F("deployment", deploymentName),
-			logging.F("error", err.Error()),
+		logging.Server.WithFields(
+			"server_name", serverName,
+			"deployment", deploymentName,
+			"error", err.Error(),
 		).Error("Failed to find pod for deployment")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to find pod for deployment: " + deploymentName,
@@ -335,17 +332,17 @@ func StopMinecraftServerHandler(c *gin.Context) {
 	}
 
 	if pod != nil {
-		logging.WithFields(
-			logging.F("server_name", serverName),
-			logging.F("pod", pod.Name),
+		logging.Server.WithFields(
+			"server_name", serverName,
+			"pod", pod.Name,
 		).Debug("Saving world before stopping server")
 		// Save the world before scaling down
 		_, _, err := kubernetes.ExecuteCommandInPod(pod.Name, config.DefaultNamespace, "minecraft-server", "mc-send-to-console save-all")
 		if err != nil {
-			logging.WithFields(
-				logging.F("server_name", serverName),
-				logging.F("pod", pod.Name),
-				logging.F("error", err.Error()),
+			logging.Server.WithFields(
+				"server_name", serverName,
+				"pod", pod.Name,
+				"error", err.Error(),
 			).Error("Failed to save world before stopping")
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error":          "Failed to save world: " + err.Error(),
@@ -353,18 +350,18 @@ func StopMinecraftServerHandler(c *gin.Context) {
 			})
 			return
 		}
-		logging.WithFields(
-			logging.F("server_name", serverName),
-			logging.F("pod", pod.Name),
+		logging.Server.WithFields(
+			"server_name", serverName,
+			"pod", pod.Name,
 		).Debug("World saved successfully before stopping")
 	}
 
 	// Scale deployment to 0
 	if err := kubernetes.SetDeploymentReplicas(config.DefaultNamespace, deploymentName, 0); err != nil {
-		logging.WithFields(
-			logging.F("server_name", serverName),
-			logging.F("deployment", deploymentName),
-			logging.F("error", err.Error()),
+		logging.Server.WithFields(
+			"server_name", serverName,
+			"deployment", deploymentName,
+			"error", err.Error(),
 		).Error("Failed to scale deployment to 0")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":          "Failed to scale deployment: " + err.Error(),
@@ -373,11 +370,11 @@ func StopMinecraftServerHandler(c *gin.Context) {
 		return
 	}
 
-	logging.WithFields(
-		logging.F("server_name", serverName),
-		logging.F("deployment", deploymentName),
-		logging.F("user_id", userID),
-		logging.F("username", username),
+	logging.Server.WithFields(
+		"server_name", serverName,
+		"deployment", deploymentName,
+		"user_id", userID,
+		"username", username,
 	).Info("Minecraft server stopped successfully")
 
 	c.JSON(http.StatusOK, gin.H{
@@ -415,30 +412,30 @@ func StartStoppedServerHandler(c *gin.Context) {
 
 	serverName := c.Param("serverName")
 
-	logging.WithFields(
-		logging.F("server_name", serverName),
-		logging.F("deployment", deploymentName),
-		logging.F("user_id", userID),
-		logging.F("username", username),
-		logging.F("remote_ip", c.ClientIP()),
+	logging.Server.WithFields(
+		"server_name", serverName,
+		"deployment", deploymentName,
+		"user_id", userID,
+		"username", username,
+		"remote_ip", c.ClientIP(),
 	).Info("Starting stopped Minecraft server")
 
 	// Check if the deployment exists
 	_, ok := kubernetes.CheckDeploymentExists(c, config.DefaultNamespace, deploymentName)
 	if !ok {
-		logging.WithFields(
-			logging.F("server_name", serverName),
-			logging.F("deployment", deploymentName),
+		logging.Server.WithFields(
+			"server_name", serverName,
+			"deployment", deploymentName,
 		).Warn("Deployment not found for start operation")
 		return
 	}
 
 	// Scale deployment to 1
 	if err := kubernetes.SetDeploymentReplicas(config.DefaultNamespace, deploymentName, 1); err != nil {
-		logging.WithFields(
-			logging.F("server_name", serverName),
-			logging.F("deployment", deploymentName),
-			logging.F("error", err.Error()),
+		logging.Server.WithFields(
+			"server_name", serverName,
+			"deployment", deploymentName,
+			"error", err.Error(),
 		).Error("Failed to scale deployment to 1")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":          "Failed to start deployment: " + err.Error(),
@@ -447,11 +444,11 @@ func StartStoppedServerHandler(c *gin.Context) {
 		return
 	}
 
-	logging.WithFields(
-		logging.F("server_name", serverName),
-		logging.F("deployment", deploymentName),
-		logging.F("user_id", userID),
-		logging.F("username", username),
+	logging.Server.WithFields(
+		"server_name", serverName,
+		"deployment", deploymentName,
+		"user_id", userID,
+		"username", username,
 	).Info("Minecraft server started successfully")
 
 	c.JSON(http.StatusOK, gin.H{
@@ -488,55 +485,55 @@ func DeleteMinecraftServerHandler(c *gin.Context) {
 
 	serverName := c.Param("serverName")
 
-	logging.WithFields(
-		logging.F("server_name", serverName),
-		logging.F("deployment", deploymentName),
-		logging.F("pvc", pvcName),
-		logging.F("user_id", userID),
-		logging.F("username", username),
-		logging.F("remote_ip", c.ClientIP()),
+	logging.Server.WithFields(
+		"server_name", serverName,
+		"deployment", deploymentName,
+		"pvc", pvcName,
+		"user_id", userID,
+		"username", username,
+		"remote_ip", c.ClientIP(),
 	).Info("Deleting Minecraft server")
 
 	// Delete the deployment if it exists
 	if err := kubernetes.DeleteDeployment(config.DefaultNamespace, deploymentName); err != nil {
-		logging.WithFields(
-			logging.F("server_name", serverName),
-			logging.F("deployment", deploymentName),
-			logging.F("error", err.Error()),
+		logging.Server.WithFields(
+			"server_name", serverName,
+			"deployment", deploymentName,
+			"error", err.Error(),
 		).Warn("Error when deleting deployment")
 	} else {
-		logging.Debug("Deployment deleted successfully")
+		logging.Server.Debug("Deployment deleted successfully")
 	}
 
 	// Delete the PVC
 	if err := kubernetes.DeletePVC(config.DefaultNamespace, pvcName); err != nil {
-		logging.WithFields(
-			logging.F("server_name", serverName),
-			logging.F("pvc", pvcName),
-			logging.F("error", err.Error()),
+		logging.Server.WithFields(
+			"server_name", serverName,
+			"pvc", pvcName,
+			"error", err.Error(),
 		).Warn("Error when deleting PVC")
 	} else {
-		logging.Debug("PVC deleted successfully")
+		logging.Server.Debug("PVC deleted successfully")
 	}
 
 	// Clean up network resources
 	serviceName := deploymentName + "-svc"
 	if err := kubernetes.DeleteService(config.DefaultNamespace, serviceName); err != nil {
-		logging.WithFields(
-			logging.F("server_name", serverName),
-			logging.F("service", serviceName),
-			logging.F("error", err.Error()),
+		logging.Server.WithFields(
+			"server_name", serverName,
+			"service", serviceName,
+			"error", err.Error(),
 		).Warn("Error when deleting service")
 	} else {
-		logging.Debug("Service deleted successfully")
+		logging.Server.Debug("Service deleted successfully")
 	}
 
-	logging.WithFields(
-		logging.F("server_name", serverName),
-		logging.F("deployment", deploymentName),
-		logging.F("pvc", pvcName),
-		logging.F("user_id", userID),
-		logging.F("username", username),
+	logging.Server.WithFields(
+		"server_name", serverName,
+		"deployment", deploymentName,
+		"pvc", pvcName,
+		"user_id", userID,
+		"username", username,
 	).Info("Minecraft server deleted successfully")
 
 	c.JSON(http.StatusOK, gin.H{
@@ -583,20 +580,20 @@ func ExecCommandHandler(c *gin.Context) {
 		username = user.Username
 	}
 
-	logging.WithFields(
-		logging.F("server_name", serverName),
-		logging.F("deployment", deploymentName),
-		logging.F("user_id", userID),
-		logging.F("username", username),
-		logging.F("remote_ip", c.ClientIP()),
+	logging.Server.WithFields(
+		"server_name", serverName,
+		"deployment", deploymentName,
+		"user_id", userID,
+		"username", username,
+		"remote_ip", c.ClientIP(),
 	).Info("Executing command on Minecraft server")
 
 	// Check if the deployment exists
 	_, ok := kubernetes.CheckDeploymentExists(c, config.DefaultNamespace, deploymentName)
 	if !ok {
-		logging.WithFields(
-			logging.F("server_name", serverName),
-			logging.F("deployment", deploymentName),
+		logging.Server.WithFields(
+			"server_name", serverName,
+			"deployment", deploymentName,
 		).Warn("Deployment not found for command execution")
 		return
 	}
@@ -604,10 +601,10 @@ func ExecCommandHandler(c *gin.Context) {
 	// Get the pod associated with this deployment
 	pod, err := kubernetes.GetMinecraftPod(config.DefaultNamespace, deploymentName)
 	if err != nil || pod == nil {
-		logging.WithFields(
-			logging.F("server_name", serverName),
-			logging.F("deployment", deploymentName),
-			logging.F("error", err),
+		logging.Server.WithFields(
+			"server_name", serverName,
+			"deployment", deploymentName,
+			"error", err,
 		).Error("Failed to find running pod for deployment")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": "Failed to find running pod for deployment: " + deploymentName,
@@ -620,19 +617,19 @@ func ExecCommandHandler(c *gin.Context) {
 	//TODO Validate the command
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		logging.WithFields(
-			logging.F("server_name", serverName),
-			logging.F("error", err.Error()),
+		logging.API.InvalidRequest.WithFields(
+			"server_name", serverName,
+			"error", err.Error(),
 		).Warn("Invalid command request format")
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	logging.WithFields(
-		logging.F("server_name", serverName),
-		logging.F("pod", pod.Name),
-		logging.F("command", req.Command),
-		logging.F("username", username),
+	logging.Server.WithFields(
+		"server_name", serverName,
+		"pod", pod.Name,
+		"command", req.Command,
+		"username", username,
 	).Debug("Executing Minecraft command")
 
 	// Prepare the command to send to the console
@@ -641,11 +638,11 @@ func ExecCommandHandler(c *gin.Context) {
 	// Execute the command in the pod
 	stdout, stderr, err := kubernetes.ExecuteCommandInPod(pod.Name, config.DefaultNamespace, "minecraft-server", execCommand)
 	if err != nil {
-		logging.WithFields(
-			logging.F("server_name", serverName),
-			logging.F("pod", pod.Name),
-			logging.F("command", req.Command),
-			logging.F("error", err.Error()),
+		logging.Server.WithFields(
+			"server_name", serverName,
+			"pod", pod.Name,
+			"command", req.Command,
+			"error", err.Error(),
 		).Error("Failed to execute command")
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":   "Failed to execute command: " + err.Error(),
@@ -655,11 +652,11 @@ func ExecCommandHandler(c *gin.Context) {
 		return
 	}
 
-	logging.WithFields(
-		logging.F("server_name", serverName),
-		logging.F("pod", pod.Name),
-		logging.F("command", req.Command),
-		logging.F("username", username),
+	logging.Server.WithFields(
+		"server_name", serverName,
+		"pod", pod.Name,
+		"command", req.Command,
+		"username", username,
 	).Info("Command executed successfully")
 
 	c.JSON(http.StatusOK, gin.H{

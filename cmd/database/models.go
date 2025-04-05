@@ -76,34 +76,34 @@ type MinecraftServer struct {
 func (u *User) HasPermission(permission int64) bool {
 	// Admin always has all permissions
 	if u.Permissions&PermAdmin != 0 {
-		logging.WithFields(
-			logging.F("user_id", u.ID),
-			logging.F("username", u.Username),
-			logging.F("permission", permission),
-			logging.F("result", true),
-		).Trace("Permission check passed: user is admin")
+		logging.Auth.Session.WithFields(
+			"user_id", u.ID,
+			"username", u.Username,
+			"permission", permission,
+			"result", true,
+		).Debug("Permission check passed: user is admin")
 		return true
 	}
 
 	result := u.Permissions&permission != 0
-	logging.WithFields(
-		logging.F("user_id", u.ID),
-		logging.F("username", u.Username),
-		logging.F("permission", permission),
-		logging.F("user_permissions", u.Permissions),
-		logging.F("result", result),
-	).Trace("Permission check completed")
+	logging.Auth.Session.WithFields(
+		"user_id", u.ID,
+		"username", u.Username,
+		"permission", permission,
+		"user_permissions", u.Permissions,
+		"result", result,
+	).Debug("Permission check completed")
 	return result
 }
 
 // IsAdmin checks if the user is an administrator.
 func (u *User) IsAdmin() bool {
 	result := u.HasPermission(PermAdmin)
-	logging.WithFields(
-		logging.F("user_id", u.ID),
-		logging.F("username", u.Username),
-		logging.F("is_admin", result),
-	).Trace("Admin check completed")
+	logging.Auth.Session.WithFields(
+		"user_id", u.ID,
+		"username", u.Username,
+		"is_admin", result,
+	).Debug("Admin check completed")
 	return result
 }
 
@@ -115,33 +115,33 @@ func (u *User) IsAdmin() bool {
 func (u *User) HasServerPermission(serverOwnerID int64, permission int64) bool {
 	// Admin always has all permissions
 	if u.Permissions&PermAdmin != 0 {
-		logging.WithFields(
-			logging.F("user_id", u.ID),
-			logging.F("username", u.Username),
-			logging.F("permission", permission),
-			logging.F("is_admin", true),
-		).Trace("Server permission check passed: user is admin")
+		logging.Auth.Session.WithFields(
+			"user_id", u.ID,
+			"username", u.Username,
+			"permission", permission,
+			"is_admin", true,
+		).Debug("Server permission check passed: user is admin")
 		return true
 	}
 
 	// Server owner has all permissions for their own server
 	if u.ID == serverOwnerID {
-		logging.WithFields(
-			logging.F("user_id", u.ID),
-			logging.F("username", u.Username),
-			logging.F("server_owner_id", serverOwnerID),
-		).Trace("Server permission check passed: user is owner")
+		logging.Auth.Session.WithFields(
+			"user_id", u.ID,
+			"username", u.Username,
+			"server_owner_id", serverOwnerID,
+		).Debug("Server permission check passed: user is owner")
 		return true
 	}
 
 	// Otherwise, check specific permission
 	result := u.Permissions&permission != 0
-	logging.WithFields(
-		logging.F("user_id", u.ID),
-		logging.F("username", u.Username),
-		logging.F("permission", permission),
-		logging.F("user_permissions", u.Permissions),
-		logging.F("result", result),
-	).Trace("Server permission check completed")
+	logging.Auth.Session.WithFields(
+		"user_id", u.ID,
+		"username", u.Username,
+		"permission", permission,
+		"user_permissions", u.Permissions,
+		"result", result,
+	).Debug("Server permission check completed")
 	return result
 }

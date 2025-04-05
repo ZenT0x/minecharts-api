@@ -18,12 +18,12 @@ func GetServerInfo(c *gin.Context) (deploymentName, pvcName string) {
 	deploymentName = config.DeploymentPrefix + serverName
 	pvcName = deploymentName + config.PVCSuffix
 
-	logging.WithFields(
+	logging.K8s.WithFields(
 		logging.F("server_name", serverName),
 		logging.F("deployment_name", deploymentName),
 		logging.F("pvc_name", pvcName),
 		logging.F("remote_ip", c.ClientIP()),
-	).Debug("Retrieved server info from request")
+	).Debug("Extracted server information")
 
 	return
 }
@@ -31,33 +31,34 @@ func GetServerInfo(c *gin.Context) (deploymentName, pvcName string) {
 // saveWorld sends a "save-all" command to the Minecraft server pod to save the world data.
 // This is a utility function to avoid code duplication across handlers.
 func SaveWorld(podName, namespace string) (stdout, stderr string, err error) {
-	logging.WithFields(
+	logging.K8s.WithFields(
 		logging.F("pod_name", podName),
 		logging.F("namespace", namespace),
-	).Debug("Saving world data for Minecraft server")
+	).Debug("Sending save-all command to Minecraft server pod")
 
 	stdout, stderr, err = ExecuteCommandInPod(podName, namespace, "minecraft-server", "mc-send-to-console save-all")
 	if err != nil {
-		logging.WithFields(
+		logging.K8s.WithFields(
 			logging.F("pod_name", podName),
 			logging.F("namespace", namespace),
 			logging.F("error", err.Error()),
-		).Error("Failed to save world data")
+		).Error("Failed to execute save-all command")
+
 		return stdout, stderr, err
 	}
 
 	// Wait for the save to complete
-	logging.WithFields(
+	logging.K8s.WithFields(
 		logging.F("pod_name", podName),
 		logging.F("namespace", namespace),
-	).Debug("World save command sent, waiting for completion")
+	).Debug("Waiting for save-all command to complete")
 
 	time.Sleep(10 * time.Second)
 
-	logging.WithFields(
+	logging.K8s.WithFields(
 		logging.F("pod_name", podName),
 		logging.F("namespace", namespace),
-	).Info("World data save completed")
+	).Debug("Save-all command completed")
 
 	return stdout, stderr, err
 }

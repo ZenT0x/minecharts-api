@@ -27,9 +27,9 @@ type Claims struct {
 
 // GenerateJWT creates a new JWT token for the given user information
 func GenerateJWT(userID int64, username, email string, permissions int64) (string, error) {
-	logging.WithFields(
-		logging.F("user_id", userID),
-		logging.F("username", username),
+	logging.Auth.JWT.WithFields(
+		"user_id", userID,
+		"username", username,
 	).Debug("Generating JWT token")
 
 	expirationTime := time.Now().Add(time.Duration(config.JWTExpiryHours) * time.Hour)
@@ -49,19 +49,19 @@ func GenerateJWT(userID int64, username, email string, permissions int64) (strin
 	tokenString, err := token.SignedString([]byte(config.JWTSecret))
 
 	if err != nil {
-		logging.WithFields(
-			logging.F("user_id", userID),
-			logging.F("username", username),
-			logging.F("error", err.Error()),
+		logging.Auth.JWT.WithFields(
+			"user_id", userID,
+			"username", username,
+			"error", err.Error(),
 		).Error("Failed to sign JWT token")
 		return "", err
 	}
 
-	logging.WithFields(
-		logging.F("user_id", userID),
-		logging.F("username", username),
-		logging.F("expires_at", expirationTime),
-		logging.F("token_length", len(tokenString)),
+	logging.Auth.JWT.WithFields(
+		"user_id", userID,
+		"username", username,
+		"expires_at", expirationTime,
+		"token_length", len(tokenString),
 	).Debug("JWT token generated successfully")
 
 	return tokenString, nil
@@ -69,7 +69,7 @@ func GenerateJWT(userID int64, username, email string, permissions int64) (strin
 
 // ValidateJWT validates the JWT token and returns the claims if valid
 func ValidateJWT(tokenString string) (*Claims, error) {
-	logging.Debug("Validating JWT token")
+	logging.Auth.JWT.Debug("Validating JWT token")
 
 	claims := &Claims{}
 
@@ -79,9 +79,9 @@ func ValidateJWT(tokenString string) (*Claims, error) {
 		func(token *jwt.Token) (interface{}, error) {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				errMsg := fmt.Sprintf("unexpected signing method: %v", token.Header["alg"])
-				logging.WithFields(
-					logging.F("error", errMsg),
-					logging.F("algorithm", token.Header["alg"]),
+				logging.Auth.JWT.WithFields(
+					"error", errMsg,
+					"algorithm", token.Header["alg"],
 				).Warn("JWT validation failed: incorrect signing method")
 				return nil, errors.New(errMsg)
 			}
@@ -91,29 +91,29 @@ func ValidateJWT(tokenString string) (*Claims, error) {
 
 	if err != nil {
 		if errors.Is(err, jwt.ErrTokenExpired) {
-			logging.WithFields(
-				logging.F("error", "token_expired"),
-				logging.F("error_details", err.Error()),
+			logging.Auth.JWT.WithFields(
+				"error", "token_expired",
+				"error_details", err.Error(),
 			).Debug("JWT validation failed: token expired")
 			return nil, ErrExpiredToken
 		}
-		logging.WithFields(
-			logging.F("error", err.Error()),
+		logging.Auth.JWT.WithFields(
+			"error", err.Error(),
 		).Warn("JWT validation failed: invalid token structure")
 		return nil, ErrInvalidToken
 	}
 
 	if !token.Valid {
-		logging.WithFields(
-			logging.F("error", "invalid_token"),
+		logging.Auth.JWT.WithFields(
+			"error", "invalid_token",
 		).Warn("JWT validation failed: token signature invalid")
 		return nil, ErrInvalidToken
 	}
 
-	logging.WithFields(
-		logging.F("user_id", claims.UserID),
-		logging.F("username", claims.Username),
-		logging.F("expires_at", claims.ExpiresAt),
+	logging.Auth.JWT.WithFields(
+		"user_id", claims.UserID,
+		"username", claims.Username,
+		"expires_at", claims.ExpiresAt,
 	).Debug("JWT token validated successfully")
 
 	return claims, nil

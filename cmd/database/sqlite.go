@@ -18,32 +18,32 @@ type SQLiteDB struct {
 
 // NewSQLiteDB creates a new SQLite database connection
 func NewSQLiteDB(path string) (*SQLiteDB, error) {
-	logging.WithFields(
-		logging.F("db_path", path),
-		logging.F("db_type", "sqlite"),
+	logging.DB.WithFields(
+		"db_path", path,
+		"db_type", "sqlite",
 	).Info("Creating new SQLite database connection")
 
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
-		logging.WithFields(
-			logging.F("db_path", path),
-			logging.F("error", err.Error()),
+		logging.DB.WithFields(
+			"db_path", path,
+			"error", err.Error(),
 		).Error("Failed to open SQLite database connection")
 		return nil, err
 	}
 
-	logging.WithFields(
-		logging.F("db_path", path),
+	logging.DB.WithFields(
+		"db_path", path,
 	).Debug("SQLite database connection established")
 	return &SQLiteDB{db: db}, nil
 }
 
 // Init initializes the database schema
 func (s *SQLiteDB) Init() error {
-	logging.Info("Initializing SQLite database schema")
+	logging.DB.Info("Initializing SQLite database schema")
 
 	// Create users table
-	logging.Debug("Creating users table if not exists")
+	logging.DB.Debug("Creating users table if not exists")
 	_, err := s.db.Exec(`
 		CREATE TABLE IF NOT EXISTS users (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -58,14 +58,14 @@ func (s *SQLiteDB) Init() error {
 		)
 	`)
 	if err != nil {
-		logging.WithFields(
-			logging.F("error", err.Error()),
+		logging.DB.WithFields(
+			"error", err.Error(),
 		).Error("Failed to create users table")
 		return err
 	}
 
 	// Create API keys table
-	logging.Debug("Creating api_keys table if not exists")
+	logging.DB.Debug("Creating api_keys table if not exists")
 	_, err = s.db.Exec(`
 		CREATE TABLE IF NOT EXISTS api_keys (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -79,8 +79,8 @@ func (s *SQLiteDB) Init() error {
 		)
 	`)
 	if err != nil {
-		logging.WithFields(
-			logging.F("error", err.Error()),
+		logging.DB.WithFields(
+			"error", err.Error(),
 		).Error("Failed to create api_keys table")
 		return err
 	}
@@ -99,23 +99,26 @@ func (s *SQLiteDB) Init() error {
     )
 `)
 	if err != nil {
+		logging.DB.WithFields(
+			"error", err.Error(),
+		).Error("Failed to create minecraft_servers table")
 		return fmt.Errorf("failed to create minecraft_servers table: %w", err)
 	}
 
 	// Check if we need to create an admin user
-	logging.Debug("Checking if admin user needs to be created")
+	logging.DB.Debug("Checking if admin user needs to be created")
 	var count int
 	err = s.db.QueryRow("SELECT COUNT(*) FROM users").Scan(&count)
 	if err != nil {
-		logging.WithFields(
-			logging.F("error", err.Error()),
+		logging.DB.WithFields(
+			"error", err.Error(),
 		).Error("Failed to count users")
 		return err
 	}
 
 	// If no users exist, create a default admin user
 	if count == 0 {
-		logging.Info("Creating default admin user")
+		logging.DB.Info("Creating default admin user")
 		now := time.Now()
 		_, err = s.db.Exec(
 			"INSERT INTO users (username, email, password_hash, permissions, active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -128,29 +131,29 @@ func (s *SQLiteDB) Init() error {
 			now,
 		)
 		if err != nil {
-			logging.WithFields(
-				logging.F("error", err.Error()),
+			logging.DB.WithFields(
+				"error", err.Error(),
 			).Error("Failed to create default admin user")
 			return err
 		}
-		logging.Info("Default admin user created successfully")
+		logging.DB.Info("Default admin user created successfully")
 	}
 
-	logging.Info("Database schema initialized successfully")
+	logging.DB.Info("Database schema initialized successfully")
 	return nil
 }
 
 // Close closes the database connection
 func (s *SQLiteDB) Close() error {
-	logging.Info("Closing SQLite database connection")
+	logging.DB.Info("Closing SQLite database connection")
 	err := s.db.Close()
 	if err != nil {
-		logging.WithFields(
-			logging.F("error", err.Error()),
+		logging.DB.WithFields(
+			"error", err.Error(),
 		).Error("Error closing SQLite database connection")
 		return err
 	}
-	logging.Debug("SQLite database connection closed successfully")
+	logging.DB.Debug("SQLite database connection closed successfully")
 	return nil
 }
 
@@ -158,9 +161,9 @@ func (s *SQLiteDB) Close() error {
 
 // CreateUser creates a new user
 func (s *SQLiteDB) CreateUser(ctx context.Context, user *User) error {
-	logging.WithFields(
-		logging.F("username", user.Username),
-		logging.F("email", user.Email),
+	logging.DB.WithFields(
+		"username", user.Username,
+		"email", user.Email,
 	).Info("Creating new user")
 
 	// Check if user already exists
@@ -170,18 +173,18 @@ func (s *SQLiteDB) CreateUser(ctx context.Context, user *User) error {
 		user.Username, user.Email,
 	).Scan(&exists)
 	if err != nil {
-		logging.WithFields(
-			logging.F("username", user.Username),
-			logging.F("email", user.Email),
-			logging.F("error", err.Error()),
+		logging.DB.WithFields(
+			"username", user.Username,
+			"email", user.Email,
+			"error", err.Error(),
 		).Error("Database error when checking if user exists")
 		return err
 	}
 	if exists {
-		logging.WithFields(
-			logging.F("username", user.Username),
-			logging.F("email", user.Email),
-			logging.F("error", "user_exists"),
+		logging.DB.WithFields(
+			"username", user.Username,
+			"email", user.Email,
+			"error", "user_exists",
 		).Warn("Cannot create user: username or email already exists")
 		return ErrUserExists
 	}
@@ -197,38 +200,38 @@ func (s *SQLiteDB) CreateUser(ctx context.Context, user *User) error {
 		user.Username, user.Email, user.PasswordHash, user.Permissions, user.Active, user.CreatedAt, user.UpdatedAt,
 	)
 	if err != nil {
-		logging.WithFields(
-			logging.F("username", user.Username),
-			logging.F("email", user.Email),
-			logging.F("error", err.Error()),
+		logging.DB.WithFields(
+			"username", user.Username,
+			"email", user.Email,
+			"error", err.Error(),
 		).Error("Failed to insert new user")
 		return err
 	}
 
 	id, err := result.LastInsertId()
 	if err != nil {
-		logging.WithFields(
-			logging.F("username", user.Username),
-			logging.F("email", user.Email),
-			logging.F("error", err.Error()),
+		logging.DB.WithFields(
+			"username", user.Username,
+			"email", user.Email,
+			"error", err.Error(),
 		).Error("Failed to get new user ID")
 		return err
 	}
 	user.ID = id
 
-	logging.WithFields(
-		logging.F("username", user.Username),
-		logging.F("email", user.Email),
-		logging.F("user_id", user.ID),
+	logging.DB.WithFields(
+		"username", user.Username,
+		"email", user.Email,
+		"user_id", user.ID,
 	).Info("User created successfully")
 	return nil
 }
 
 // GetUserByID retrieves a user by ID
 func (s *SQLiteDB) GetUserByID(ctx context.Context, id int64) (*User, error) {
-	logging.WithFields(
-		logging.F("user_id", id),
-		logging.F("db_type", "sqlite"),
+	logging.DB.WithFields(
+		"user_id", id,
+		"db_type", "sqlite",
 	).Debug("Getting user by ID")
 
 	user := &User{}
@@ -240,73 +243,73 @@ func (s *SQLiteDB) GetUserByID(ctx context.Context, id int64) (*User, error) {
 		&user.Active, &user.LastLogin, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
-		logging.WithFields(
-			logging.F("user_id", id),
-			logging.F("error", "user_not_found"),
+		logging.DB.WithFields(
+			"user_id", id,
+			"error", "user_not_found",
 		).Debug("User not found by ID")
 		return nil, ErrUserNotFound
 	}
 	if err != nil {
-		logging.WithFields(
-			logging.F("user_id", id),
-			logging.F("error", err.Error()),
+		logging.DB.WithFields(
+			"user_id", id,
+			"error", err.Error(),
 		).Error("Database error when getting user by ID")
 		return nil, err
 	}
 
-	logging.WithFields(
-		logging.F("user_id", id),
-		logging.F("username", user.Username),
+	logging.DB.WithFields(
+		"user_id", id,
+		"username", user.Username,
 	).Debug("Successfully retrieved user by ID")
 	return user, nil
 }
 
 // GetUserByUsername retrieves a user by username
 func (s *SQLiteDB) GetUserByUsername(ctx context.Context, username string) (*User, error) {
-	logging.WithFields(
-		logging.F("username", username),
-		logging.F("db_type", "sqlite"),
+	logging.DB.WithFields(
+		"username", username,
+		"db_type", "sqlite",
 	).Debug("Getting user by username")
 
 	user := &User{}
 	query := "SELECT id, username, email, password_hash, permissions, active, last_login, created_at, updated_at FROM users WHERE username = ?"
 
-	logging.WithFields(
-		logging.F("username", username),
-		logging.F("query", query),
-	).Trace("Executing database query")
+	logging.DB.WithFields(
+		"username", username,
+		"query", query,
+	).Debug("Executing database query")
 
 	err := s.db.QueryRowContext(ctx, query, username).Scan(
 		&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.Permissions,
 		&user.Active, &user.LastLogin, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
-		logging.WithFields(
-			logging.F("username", username),
-			logging.F("error", "user_not_found"),
+		logging.DB.WithFields(
+			"username", username,
+			"error", "user_not_found",
 		).Debug("User not found")
 		return nil, ErrUserNotFound
 	}
 	if err != nil {
-		logging.WithFields(
-			logging.F("username", username),
-			logging.F("error", err.Error()),
+		logging.DB.WithFields(
+			"username", username,
+			"error", err.Error(),
 		).Error("Database error when getting user by username")
 		return nil, err
 	}
 
-	logging.WithFields(
-		logging.F("username", user.Username),
-		logging.F("user_id", user.ID),
+	logging.DB.WithFields(
+		"username", user.Username,
+		"user_id", user.ID,
 	).Debug("Successfully retrieved user")
 	return user, nil
 }
 
 // UpdateUser updates a user's information
 func (s *SQLiteDB) UpdateUser(ctx context.Context, user *User) error {
-	logging.WithFields(
-		logging.F("user_id", user.ID),
-		logging.F("username", user.Username),
+	logging.DB.WithFields(
+		"user_id", user.ID,
+		"username", user.Username,
 	).Info("Updating user information")
 
 	user.UpdatedAt = time.Now()
@@ -316,52 +319,52 @@ func (s *SQLiteDB) UpdateUser(ctx context.Context, user *User) error {
 		user.Username, user.Email, user.PasswordHash, user.Permissions, user.Active, user.UpdatedAt, user.ID,
 	)
 	if err != nil {
-		logging.WithFields(
-			logging.F("user_id", user.ID),
-			logging.F("username", user.Username),
-			logging.F("error", err.Error()),
+		logging.DB.WithFields(
+			"user_id", user.ID,
+			"username", user.Username,
+			"error", err.Error(),
 		).Error("Failed to update user")
 		return err
 	}
 
-	logging.WithFields(
-		logging.F("user_id", user.ID),
-		logging.F("username", user.Username),
+	logging.DB.WithFields(
+		"user_id", user.ID,
+		"username", user.Username,
 	).Info("User updated successfully")
 	return nil
 }
 
 // DeleteUser deletes a user by ID
 func (s *SQLiteDB) DeleteUser(ctx context.Context, id int64) error {
-	logging.WithFields(
-		logging.F("user_id", id),
+	logging.DB.WithFields(
+		"user_id", id,
 	).Info("Deleting user")
 
 	_, err := s.db.ExecContext(ctx, "DELETE FROM users WHERE id = ?", id)
 	if err != nil {
-		logging.WithFields(
-			logging.F("user_id", id),
-			logging.F("error", err.Error()),
+		logging.DB.WithFields(
+			"user_id", id,
+			"error", err.Error(),
 		).Error("Failed to delete user")
 		return err
 	}
 
-	logging.WithFields(
-		logging.F("user_id", id),
+	logging.DB.WithFields(
+		"user_id", id,
 	).Info("User deleted successfully")
 	return nil
 }
 
 // ListUsers returns a list of all users
 func (s *SQLiteDB) ListUsers(ctx context.Context) ([]*User, error) {
-	logging.Debug("Listing all users")
+	logging.DB.Debug("Listing all users")
 
 	rows, err := s.db.QueryContext(ctx,
 		"SELECT id, username, email, password_hash, permissions, active, last_login, created_at, updated_at FROM users",
 	)
 	if err != nil {
-		logging.WithFields(
-			logging.F("error", err.Error()),
+		logging.DB.WithFields(
+			"error", err.Error(),
 		).Error("Failed to query users")
 		return nil, err
 	}
@@ -374,8 +377,8 @@ func (s *SQLiteDB) ListUsers(ctx context.Context) ([]*User, error) {
 			&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.Permissions,
 			&user.Active, &user.LastLogin, &user.CreatedAt, &user.UpdatedAt,
 		); err != nil {
-			logging.WithFields(
-				logging.F("error", err.Error()),
+			logging.DB.WithFields(
+				"error", err.Error(),
 			).Error("Failed to scan user row")
 			return nil, err
 		}
@@ -383,14 +386,14 @@ func (s *SQLiteDB) ListUsers(ctx context.Context) ([]*User, error) {
 	}
 
 	if err = rows.Err(); err != nil {
-		logging.WithFields(
-			logging.F("error", err.Error()),
+		logging.DB.WithFields(
+			"error", err.Error(),
 		).Error("Error during user rows iteration")
 		return nil, err
 	}
 
-	logging.WithFields(
-		logging.F("count", len(users)),
+	logging.DB.WithFields(
+		"count", len(users),
 	).Debug("Successfully retrieved user list")
 	return users, nil
 }
@@ -399,9 +402,9 @@ func (s *SQLiteDB) ListUsers(ctx context.Context) ([]*User, error) {
 
 // CreateAPIKey creates a new API key
 func (s *SQLiteDB) CreateAPIKey(ctx context.Context, key *APIKey) error {
-	logging.WithFields(
-		logging.F("user_id", key.UserID),
-		logging.F("description", key.Description),
+	logging.DB.WithFields(
+		"user_id", key.UserID,
+		"description", key.Description,
 	).Info("Creating new API key")
 
 	now := time.Now()
@@ -412,26 +415,26 @@ func (s *SQLiteDB) CreateAPIKey(ctx context.Context, key *APIKey) error {
 		key.UserID, key.Key, key.Description, key.ExpiresAt, key.CreatedAt,
 	)
 	if err != nil {
-		logging.WithFields(
-			logging.F("user_id", key.UserID),
-			logging.F("error", err.Error()),
+		logging.DB.WithFields(
+			"user_id", key.UserID,
+			"error", err.Error(),
 		).Error("Failed to insert API key")
 		return err
 	}
 
 	id, err := result.LastInsertId()
 	if err != nil {
-		logging.WithFields(
-			logging.F("user_id", key.UserID),
-			logging.F("error", err.Error()),
+		logging.DB.WithFields(
+			"user_id", key.UserID,
+			"error", err.Error(),
 		).Error("Failed to get API key ID")
 		return err
 	}
 	key.ID = id
 
-	logging.WithFields(
-		logging.F("user_id", key.UserID),
-		logging.F("key_id", key.ID),
+	logging.DB.WithFields(
+		"user_id", key.UserID,
+		"key_id", key.ID,
 	).Info("API key created successfully")
 	return nil
 }
@@ -444,8 +447,8 @@ func (s *SQLiteDB) GetAPIKey(ctx context.Context, keyStr string) (*APIKey, error
 		maskedKey = keyStr[:4] + "..." + keyStr[len(keyStr)-4:]
 	}
 
-	logging.WithFields(
-		logging.F("key", maskedKey),
+	logging.DB.WithFields(
+		"key", maskedKey,
 	).Debug("Looking up API key")
 
 	key := &APIKey{}
@@ -456,16 +459,16 @@ func (s *SQLiteDB) GetAPIKey(ctx context.Context, keyStr string) (*APIKey, error
 		&key.ID, &key.UserID, &key.Key, &key.Description, &key.LastUsed, &key.ExpiresAt, &key.CreatedAt,
 	)
 	if err == sql.ErrNoRows {
-		logging.WithFields(
-			logging.F("key", maskedKey),
-			logging.F("error", "invalid_api_key"),
+		logging.DB.WithFields(
+			"key", maskedKey,
+			"error", "invalid_api_key",
 		).Warn("API key not found")
 		return nil, ErrInvalidAPIKey
 	}
 	if err != nil {
-		logging.WithFields(
-			logging.F("key", maskedKey),
-			logging.F("error", err.Error()),
+		logging.DB.WithFields(
+			"key", maskedKey,
+			"error", err.Error(),
 		).Error("Database error when retrieving API key")
 		return nil, err
 	}
@@ -475,55 +478,55 @@ func (s *SQLiteDB) GetAPIKey(ctx context.Context, keyStr string) (*APIKey, error
 	key.LastUsed = now
 	_, err = s.db.ExecContext(ctx, "UPDATE api_keys SET last_used = ? WHERE id = ?", now, key.ID)
 	if err != nil {
-		logging.WithFields(
-			logging.F("key_id", key.ID),
-			logging.F("error", err.Error()),
+		logging.DB.WithFields(
+			"key_id", key.ID,
+			"error", err.Error(),
 		).Error("Failed to update API key last used time")
 		return nil, err
 	}
 
 	// Check if the key has expired
 	if key.ExpiresAt != nil && key.ExpiresAt.Before(now) {
-		logging.WithFields(
-			logging.F("key_id", key.ID),
-			logging.F("user_id", key.UserID),
-			logging.F("expired_at", key.ExpiresAt),
+		logging.DB.WithFields(
+			"key_id", key.ID,
+			"user_id", key.UserID,
+			"expired_at", key.ExpiresAt,
 		).Warn("Attempted to use expired API key")
 		return nil, ErrInvalidAPIKey
 	}
 
-	logging.WithFields(
-		logging.F("key_id", key.ID),
-		logging.F("user_id", key.UserID),
+	logging.DB.WithFields(
+		"key_id", key.ID,
+		"user_id", key.UserID,
 	).Debug("API key found and last used time updated")
 	return key, nil
 }
 
 // DeleteAPIKey deletes an API key by ID
 func (s *SQLiteDB) DeleteAPIKey(ctx context.Context, id int64) error {
-	logging.WithFields(
-		logging.F("key_id", id),
+	logging.DB.WithFields(
+		"key_id", id,
 	).Info("Deleting API key")
 
 	_, err := s.db.ExecContext(ctx, "DELETE FROM api_keys WHERE id = ?", id)
 	if err != nil {
-		logging.WithFields(
-			logging.F("key_id", id),
-			logging.F("error", err.Error()),
+		logging.DB.WithFields(
+			"key_id", id,
+			"error", err.Error(),
 		).Error("Failed to delete API key")
 		return err
 	}
 
-	logging.WithFields(
-		logging.F("key_id", id),
+	logging.DB.WithFields(
+		"key_id", id,
 	).Info("API key deleted successfully")
-	return err
+	return nil
 }
 
 // ListAPIKeysByUser lists all API keys for a user
 func (s *SQLiteDB) ListAPIKeysByUser(ctx context.Context, userID int64) ([]*APIKey, error) {
-	logging.WithFields(
-		logging.F("user_id", userID),
+	logging.DB.WithFields(
+		"user_id", userID,
 	).Debug("Listing API keys for user")
 
 	rows, err := s.db.QueryContext(ctx,
@@ -531,9 +534,9 @@ func (s *SQLiteDB) ListAPIKeysByUser(ctx context.Context, userID int64) ([]*APIK
 		userID,
 	)
 	if err != nil {
-		logging.WithFields(
-			logging.F("user_id", userID),
-			logging.F("error", err.Error()),
+		logging.DB.WithFields(
+			"user_id", userID,
+			"error", err.Error(),
 		).Error("Failed to query API keys")
 		return nil, err
 	}
@@ -545,9 +548,9 @@ func (s *SQLiteDB) ListAPIKeysByUser(ctx context.Context, userID int64) ([]*APIK
 		if err := rows.Scan(
 			&key.ID, &key.UserID, &key.Key, &key.Description, &key.LastUsed, &key.ExpiresAt, &key.CreatedAt,
 		); err != nil {
-			logging.WithFields(
-				logging.F("user_id", userID),
-				logging.F("error", err.Error()),
+			logging.DB.WithFields(
+				"user_id", userID,
+				"error", err.Error(),
 			).Error("Failed to scan API key row")
 			return nil, err
 		}
@@ -555,22 +558,27 @@ func (s *SQLiteDB) ListAPIKeysByUser(ctx context.Context, userID int64) ([]*APIK
 	}
 
 	if err = rows.Err(); err != nil {
-		logging.WithFields(
-			logging.F("user_id", userID),
-			logging.F("error", err.Error()),
+		logging.DB.WithFields(
+			"user_id", userID,
+			"error", err.Error(),
 		).Error("Error during API key rows iteration")
 		return nil, err
 	}
 
-	logging.WithFields(
-		logging.F("user_id", userID),
-		logging.F("count", len(keys)),
+	logging.DB.WithFields(
+		"user_id", userID,
+		"count", len(keys),
 	).Debug("Successfully retrieved API keys")
 	return keys, nil
 }
 
 // CreateServerRecord creates a new server record
 func (db *SQLiteDB) CreateServerRecord(ctx context.Context, server *MinecraftServer) error {
+	logging.DB.WithFields(
+		"server_name", server.ServerName,
+		"owner_id", server.OwnerID,
+	).Info("Creating new server record")
+
 	query := `INSERT INTO minecraft_servers
               (server_name, deployment_name, pvc_name, owner_id, status, created_at, updated_at)
               VALUES (?, ?, ?, ?, ?, ?, ?)`
@@ -590,20 +598,36 @@ func (db *SQLiteDB) CreateServerRecord(ctx context.Context, server *MinecraftSer
 	)
 
 	if err != nil {
+		logging.DB.WithFields(
+			"server_name", server.ServerName,
+			"error", err.Error(),
+		).Error("Failed to create server record")
 		return fmt.Errorf("failed to create server record: %w", err)
 	}
 
 	id, err := result.LastInsertId()
 	if err != nil {
+		logging.DB.WithFields(
+			"server_name", server.ServerName,
+			"error", err.Error(),
+		).Error("Failed to get server ID")
 		return fmt.Errorf("failed to get server ID: %w", err)
 	}
 	server.ID = id
 
+	logging.DB.WithFields(
+		"server_name", server.ServerName,
+		"server_id", server.ID,
+	).Info("Server record created successfully")
 	return nil
 }
 
 // GetServerByName gets a server by its name
 func (db *SQLiteDB) GetServerByName(ctx context.Context, serverName string) (*MinecraftServer, error) {
+	logging.DB.WithFields(
+		"server_name", serverName,
+	).Debug("Getting server by name")
+
 	query := `SELECT id, server_name, deployment_name, pvc_name, owner_id,
               status, created_at, updated_at
               FROM minecraft_servers WHERE server_name = ?`
@@ -621,24 +645,44 @@ func (db *SQLiteDB) GetServerByName(ctx context.Context, serverName string) (*Mi
 	)
 
 	if err == sql.ErrNoRows {
+		logging.DB.WithFields(
+			"server_name", serverName,
+			"error", "server_not_found",
+		).Debug("Server not found")
 		return nil, fmt.Errorf("server not found: %s", serverName)
 	}
 
 	if err != nil {
+		logging.DB.WithFields(
+			"server_name", serverName,
+			"error", err.Error(),
+		).Error("Failed to get server")
 		return nil, fmt.Errorf("failed to get server: %w", err)
 	}
 
+	logging.DB.WithFields(
+		"server_name", serverName,
+		"server_id", server.ID,
+	).Debug("Server found")
 	return &server, nil
 }
 
 // ListServersByOwner list servers by owner ID
 func (db *SQLiteDB) ListServersByOwner(ctx context.Context, ownerID int64) ([]*MinecraftServer, error) {
+	logging.DB.WithFields(
+		"owner_id", ownerID,
+	).Debug("Listing servers by owner")
+
 	query := `SELECT id, server_name, deployment_name, pvc_name, owner_id,
               status, created_at, updated_at
               FROM minecraft_servers WHERE owner_id = ?`
 
 	rows, err := db.db.QueryContext(ctx, query, ownerID)
 	if err != nil {
+		logging.DB.WithFields(
+			"owner_id", ownerID,
+			"error", err.Error(),
+		).Error("Failed to list servers")
 		return nil, fmt.Errorf("failed to list servers: %w", err)
 	}
 	defer rows.Close()
@@ -656,39 +700,76 @@ func (db *SQLiteDB) ListServersByOwner(ctx context.Context, ownerID int64) ([]*M
 			&server.CreatedAt,
 			&server.UpdatedAt,
 		); err != nil {
+			logging.DB.WithFields(
+				"owner_id", ownerID,
+				"error", err.Error(),
+			).Error("Failed to scan server row")
 			return nil, fmt.Errorf("failed to scan server row: %w", err)
 		}
 		servers = append(servers, &server)
 	}
 
 	if err := rows.Err(); err != nil {
+		logging.DB.WithFields(
+			"owner_id", ownerID,
+			"error", err.Error(),
+		).Error("Error iterating server rows")
 		return nil, fmt.Errorf("error iterating server rows: %w", err)
 	}
 
+	logging.DB.WithFields(
+		"owner_id", ownerID,
+		"server_count", len(servers),
+	).Debug("Servers listed successfully")
 	return servers, nil
 }
 
 // UpdateServerStatus updates the status of a server
 func (db *SQLiteDB) UpdateServerStatus(ctx context.Context, serverName string, status string) error {
+	logging.DB.WithFields(
+		"server_name", serverName,
+		"new_status", status,
+	).Info("Updating server status")
+
 	query := `UPDATE minecraft_servers SET status = ?, updated_at = ? WHERE server_name = ?`
 
 	now := time.Now()
 	_, err := db.db.ExecContext(ctx, query, status, now, serverName)
 	if err != nil {
+		logging.DB.WithFields(
+			"server_name", serverName,
+			"status", status,
+			"error", err.Error(),
+		).Error("Failed to update server status")
 		return fmt.Errorf("failed to update server status: %w", err)
 	}
 
+	logging.DB.WithFields(
+		"server_name", serverName,
+		"status", status,
+	).Info("Server status updated successfully")
 	return nil
 }
 
 // DeleteServerRecord deletes a server record by its name
 func (db *SQLiteDB) DeleteServerRecord(ctx context.Context, serverName string) error {
+	logging.DB.WithFields(
+		"server_name", serverName,
+	).Info("Deleting server record")
+
 	query := `DELETE FROM minecraft_servers WHERE server_name = ?`
 
 	_, err := db.db.ExecContext(ctx, query, serverName)
 	if err != nil {
+		logging.DB.WithFields(
+			"server_name", serverName,
+			"error", err.Error(),
+		).Error("Failed to delete server record")
 		return fmt.Errorf("failed to delete server record: %w", err)
 	}
 
+	logging.DB.WithFields(
+		"server_name", serverName,
+	).Info("Server record deleted successfully")
 	return nil
 }

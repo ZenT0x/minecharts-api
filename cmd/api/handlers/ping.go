@@ -1,6 +1,10 @@
 package handlers
 
-import "github.com/gin-gonic/gin"
+import (
+	"minecharts/cmd/logging"
+
+	"github.com/gin-gonic/gin"
+)
 
 // PingHandler returns a simple "pong" message to confirm the API is online.
 //
@@ -11,5 +15,6 @@ import "github.com/gin-gonic/gin"
 // @Success      200  {object}  map[string]string  "Pong response"
 // @Router       /ping [get]
 func PingHandler(c *gin.Context) {
+	logging.API.WithFields("remote_ip", c.ClientIP()).Info("Ping request received")
 	c.JSON(200, gin.H{"message": "pong"})
 }

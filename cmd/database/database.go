@@ -3,9 +3,10 @@ package database
 import (
 	"context"
 	"errors"
-	"log"
 	"os"
 	"sync"
+
+	"minecharts/cmd/logging"
 )
 
 // Supported database types
@@ -57,39 +58,57 @@ var (
 
 // InitDB initializes the database with the provided configuration
 func InitDB(dbType string, connectionString string) error {
-	log.Printf("Initializing database of type: %s", dbType)
+	logging.DB.WithFields(
+		"db_type", dbType,
+	).Info("Initializing database")
+
 	var err error
 	dbOnce.Do(func() {
 		switch dbType {
 		case SQLite:
-			log.Printf("Creating SQLite database connection to: %s", connectionString)
+			logging.DB.WithFields(
+				"connection", connectionString,
+				"db_type", "sqlite",
+			).Info("Creating SQLite database connection")
 			db, err = NewSQLiteDB(connectionString)
 		case PostgreSQL:
-			log.Printf("Creating PostgreSQL database connection to: %s", connectionString)
+			logging.DB.WithFields(
+				"connection", connectionString,
+				"db_type", "postgres",
+			).Info("Creating PostgreSQL database connection")
 			db, err = NewPostgresDB(connectionString)
 		default:
 			// Default to SQLite if not specified
-			log.Printf("Unknown database type: %s, using SQLite as default", dbType)
+			logging.DB.WithFields(
+				"requested_type", dbType,
+				"using_type", "sqlite",
+			).Warn("Unknown database type, using SQLite as default")
 			db, err = NewSQLiteDB(connectionString)
 		}
 
 		if err != nil {
-			log.Printf("Failed to initialize database: %v", err)
+			logging.DB.WithFields(
+				"error", err.Error(),
+			).Error("Failed to initialize database")
 			return
 		}
 
-		log.Printf("Database connection established, initializing schema")
+		logging.DB.Debug("Database connection established, initializing schema")
 		if err = db.Init(); err != nil {
-			log.Printf("Failed to initialize database schema: %v", err)
+			logging.DB.WithFields(
+				"error", err.Error(),
+			).Error("Failed to initialize database schema")
 		} else {
-			log.Printf("Database schema initialized successfully")
+			logging.DB.Info("Database schema initialized successfully")
 		}
 	})
 
 	if err != nil {
-		log.Printf("Database initialization failed: %v", err)
+		logging.DB.WithFields(
+			"error", err.Error(),
+		).Error("Database initialization failed")
 	} else {
-		log.Printf("Database initialization completed successfully")
+		logging.DB.Info("Database initialization completed successfully")
 	}
 	return err
 }
@@ -97,28 +116,39 @@ func InitDB(dbType string, connectionString string) error {
 // GetDB returns the global database instance
 func GetDB() DB {
 	if db == nil {
-		log.Printf("Database instance not initialized, creating default SQLite instance")
+		logging.DB.Warn("Database instance not initialized, creating default SQLite instance")
 		// Default to SQLite with a file in the data directory
 		dataDir := os.Getenv("DATA_DIR")
 		if dataDir == "" {
 			dataDir = "./app/data"
-			log.Printf("DATA_DIR environment variable not set, using default: %s", dataDir)
+			logging.DB.WithFields(
+				"default_dir", dataDir,
+			).Warn("DATA_DIR environment variable not set, using default")
 		} else {
-			log.Printf("Using DATA_DIR from environment: %s", dataDir)
+			logging.DB.WithFields(
+				"data_dir", dataDir,
+			).Debug("Using DATA_DIR from environment")
 		}
 
 		// Create data directory if it doesn't exist
 		if err := os.MkdirAll(dataDir, 0755); err != nil {
-			log.Printf("Failed to create data directory: %v", err)
+			logging.DB.WithFields(
+				"data_dir", dataDir,
+				"error", err.Error(),
+			).Error("Failed to create data directory")
 		} else {
-			log.Printf("Data directory created or already exists: %s", dataDir)
+			logging.DB.WithFields(
+				"data_dir", dataDir,
+			).Debug("Data directory created or already exists")
 		}
 
 		dbPath := dataDir + "/minecharts.db"
-		log.Printf("Initializing default SQLite database at: %s", dbPath)
+		logging.DB.WithFields(
+			"db_path", dbPath,
+		).Info("Initializing default SQLite database")
 		InitDB(SQLite, dbPath)
 	} else {
-		log.Printf("Using existing database instance")
+		logging.DB.Debug("Using existing database instance")
 	}
 	return db
 }

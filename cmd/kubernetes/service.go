@@ -14,12 +14,12 @@ import (
 func CreateService(namespace, deploymentName string, serviceType corev1.ServiceType, port int32, annotations map[string]string) (*corev1.Service, error) {
 	serviceName := deploymentName + "-svc"
 
-	logging.WithFields(
-		logging.F("namespace", namespace),
-		logging.F("deployment_name", deploymentName),
-		logging.F("service_name", serviceName),
-		logging.F("service_type", serviceType),
-		logging.F("port", port),
+	logging.K8s.WithFields(
+		"namespace", namespace,
+		"deployment_name", deploymentName,
+		"service_name", serviceName,
+		"service_type", serviceType,
+		"port", port,
 	).Info("Creating Kubernetes service")
 
 	service := &corev1.Service{
@@ -49,19 +49,19 @@ func CreateService(namespace, deploymentName string, serviceType corev1.ServiceT
 
 	createdService, err := Clientset.CoreV1().Services(namespace).Create(context.Background(), service, metav1.CreateOptions{})
 	if err != nil {
-		logging.WithFields(
-			logging.F("namespace", namespace),
-			logging.F("service_name", serviceName),
-			logging.F("error", err.Error()),
+		logging.K8s.WithFields(
+			"namespace", namespace,
+			"service_name", serviceName,
+			"error", err.Error(),
 		).Error("Failed to create service")
 		return nil, err
 	}
 
-	logging.WithFields(
-		logging.F("namespace", namespace),
-		logging.F("service_name", serviceName),
-		logging.F("service_type", serviceType),
-		logging.F("cluster_ip", createdService.Spec.ClusterIP),
+	logging.K8s.WithFields(
+		"namespace", namespace,
+		"service_name", serviceName,
+		"service_type", serviceType,
+		"cluster_ip", createdService.Spec.ClusterIP,
 	).Info("Service created successfully")
 
 	return createdService, nil
@@ -69,24 +69,24 @@ func CreateService(namespace, deploymentName string, serviceType corev1.ServiceT
 
 // deleteService removes a service if it exists
 func DeleteService(namespace, serviceName string) error {
-	logging.WithFields(
-		logging.F("namespace", namespace),
-		logging.F("service_name", serviceName),
+	logging.K8s.WithFields(
+		"namespace", namespace,
+		"service_name", serviceName,
 	).Debug("Attempting to delete service")
 
 	err := Clientset.CoreV1().Services(namespace).Delete(context.Background(), serviceName, metav1.DeleteOptions{})
 	if err != nil {
-		logging.WithFields(
-			logging.F("namespace", namespace),
-			logging.F("service_name", serviceName),
-			logging.F("error", err.Error()),
+		logging.K8s.WithFields(
+			"namespace", namespace,
+			"service_name", serviceName,
+			"error", err.Error(),
 		).Error("Failed to delete service")
 		return err
 	}
 
-	logging.WithFields(
-		logging.F("namespace", namespace),
-		logging.F("service_name", serviceName),
+	logging.K8s.WithFields(
+		"namespace", namespace,
+		"service_name", serviceName,
 	).Info("Service deleted successfully")
 
 	return nil
@@ -94,26 +94,26 @@ func DeleteService(namespace, serviceName string) error {
 
 // getServiceDetails retrieves information about an existing service
 func GetServiceDetails(namespace, serviceName string) (*corev1.Service, error) {
-	logging.WithFields(
-		logging.F("namespace", namespace),
-		logging.F("service_name", serviceName),
+	logging.K8s.WithFields(
+		"namespace", namespace,
+		"service_name", serviceName,
 	).Debug("Getting service details")
 
 	service, err := Clientset.CoreV1().Services(namespace).Get(context.Background(), serviceName, metav1.GetOptions{})
 	if err != nil {
-		logging.WithFields(
-			logging.F("namespace", namespace),
-			logging.F("service_name", serviceName),
-			logging.F("error", err.Error()),
+		logging.K8s.WithFields(
+			"namespace", namespace,
+			"service_name", serviceName,
+			"error", err.Error(),
 		).Error("Failed to get service details")
 		return nil, err
 	}
 
-	logging.WithFields(
-		logging.F("namespace", namespace),
-		logging.F("service_name", serviceName),
-		logging.F("service_type", service.Spec.Type),
-		logging.F("cluster_ip", service.Spec.ClusterIP),
+	logging.K8s.WithFields(
+		"namespace", namespace,
+		"service_name", serviceName,
+		"service_type", service.Spec.Type,
+		"cluster_ip", service.Spec.ClusterIP,
 	).Debug("Retrieved service details")
 
 	return service, nil

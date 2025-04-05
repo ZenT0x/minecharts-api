@@ -1,17 +1,22 @@
-// Package logging provides centralized logging functionality for the application.
 package logging
 
 import (
+	"minecharts/cmd/config"
 	"os"
 	"strings"
 
 	"github.com/sirupsen/logrus"
-
-	"minecharts/cmd/config"
 )
 
-// Logger is the global logger instance
-var Logger *logrus.Logger
+// Exported variables
+var (
+	Logger *logrus.Logger
+	Auth   *AuthDomain
+	Server *ServerDomain
+	API    *APIDomain
+	DB     *DBDomain
+	K8s    *K8sDomain
+)
 
 // Field represents a log field with key and value
 type Field struct {
@@ -77,60 +82,61 @@ func F(key string, value interface{}) Field {
 	return Field{Key: key, Value: value}
 }
 
-// Convenience wrapper functions for common logging levels
-func Trace(msg string) {
-	Logger.Trace(msg)
-}
+// Initialization of domains
+func InitStructuredLogging() {
+	// Initialize Auth domain
+	Auth = &AuthDomain{
+		LogDomain: Domain("Auth"),
+	}
+	Auth.InvalidCredentials = Auth.LogDomain.Action("InvalidCredentials")
+	Auth.SessionExpired = Auth.LogDomain.Action("SessionExpired")
+	Auth.Session = Auth.LogDomain.Action("Session")
 
-func Debug(msg string) {
-	Logger.Debug(msg)
-}
+	// Initialize Login subdomain
+	Auth.Login = &AuthLoginDomain{
+		LogDomain: Auth.LogDomain.SubDomain("Login"),
+	}
 
-func Info(msg string) {
-	Logger.Info(msg)
-}
+	// Initialize Register subdomain
+	Auth.Register = &AuthRegisterDomain{
+		LogDomain: Auth.LogDomain.SubDomain("Register"),
+	}
 
-func Warn(msg string) {
-	Logger.Warn(msg)
-}
+	// Initialize JWT subdomain
+	Auth.JWT = &AuthJWTDomain{
+		LogDomain: Auth.LogDomain.SubDomain("JWT"),
+	}
 
-func Error(msg string) {
-	Logger.Error(msg)
-}
+	// Initialize OAuth subdomain
+	Auth.OAuth = &AuthOAuthDomain{
+		LogDomain: Auth.LogDomain.SubDomain("OAuth"),
+	}
 
-func Fatal(msg string) {
-	Logger.Fatal(msg)
-}
+	// Initialize API domain
+	API = &APIDomain{
+		LogDomain: Domain("API"),
+	}
 
-func Panic(msg string) {
-	Logger.Panic(msg)
-}
+	API.InvalidRequest = API.LogDomain.Action("InvalidRequest")
+	API.Keys = API.LogDomain.Action("Keys")
 
-// Formatted convenience wrapper functions
-func Tracef(format string, args ...interface{}) {
-	Logger.Tracef(format, args...)
-}
+	// Initialize Database domain
+	DB = &DBDomain{
+		LogDomain: Domain("Database"),
+	}
 
-func Debugf(format string, args ...interface{}) {
-	Logger.Debugf(format, args...)
-}
+	// Initialize K8s domain
+	K8s = &K8sDomain{
+		LogDomain: Domain("K8s"),
+	}
 
-func Infof(format string, args ...interface{}) {
-	Logger.Infof(format, args...)
-}
-
-func Warnf(format string, args ...interface{}) {
-	Logger.Warnf(format, args...)
-}
-
-func Errorf(format string, args ...interface{}) {
-	Logger.Errorf(format, args...)
-}
-
-func Fatalf(format string, args ...interface{}) {
-	Logger.Fatalf(format, args...)
-}
-
-func Panicf(format string, args ...interface{}) {
-	Logger.Panicf(format, args...)
+	// Initialize Server domain
+	Server = &ServerDomain{
+		LogDomain: Domain("Server"),
+	}
+	Server.Started = Server.LogDomain.Action("Started")
+	Server.Stopped = Server.LogDomain.Action("Stopped")
+	Server.Restarted = Server.LogDomain.Action("Restarted")
+	Server.Deleted = Server.LogDomain.Action("Deleted")
+	Server.CommandExec = Server.LogDomain.Action("CommandExec")
 }

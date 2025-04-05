@@ -1,51 +1,62 @@
 package logging
 
-/*
-// Main domains
-var (
-// Auth - Authentication domain
-// Auth = Domain("Auth")
+// Typed structures for domains
+type AuthDomain struct {
+	*LogDomain
+	// Direct actions
+	InvalidCredentials *LogAction
+	SessionExpired     *LogAction
+	Session            *LogAction
 
-// Server - Minecraft servers domain
-// Server = Domain("Server")
+	// Sub-domains
+	Login    *AuthLoginDomain
+	Register *AuthRegisterDomain
+	JWT      *AuthJWTDomain
+	OAuth    *AuthOAuthDomain
+	Password *AuthPasswordDomain
+}
 
-// Database - Database domain
-// Database = Domain("Database")
+type ServerDomain struct {
+	*LogDomain
+	Started     *LogAction
+	Stopped     *LogAction
+	Restarted   *LogAction
+	Deleted     *LogAction
+	CommandExec *LogAction
+}
 
-// API - API domain
-// API = Domain("API")
-)
+type APIDomain struct {
+	*LogDomain
+	InvalidRequest *LogAction
+	Keys           *LogAction
+}
 
-// Auth subdomains
-var (
-	// Auth.Login - Login subdomain
-	AuthLogin = Auth.SubDomain("Login")
+type DBDomain struct {
+	*LogDomain
+}
 
-	// Auth.Register - Registration subdomain
-	AuthRegister = Auth.SubDomain("Register")
+type K8sDomain struct {
+	*LogDomain
+}
 
-	// Auth.JWT - JWT tokens subdomain
-	AuthJWT = Auth.SubDomain("JWT")
-)
+// Sub-domain structures
 
-// Frequently used predefined actions
-var (
-	// Auth.InvalidCredentials - Authentication action with invalid credentials
-	AuthInvalidCredentials = Auth.Action("InvalidCredentials")
+type AuthLoginDomain struct {
+	*LogDomain
+}
 
-	// Auth.Login.Success - Successful login action
-	AuthLoginSuccess = AuthLogin.Action("Success")
+type AuthRegisterDomain struct {
+	*LogDomain
+}
 
-	// Auth.Login.Failed - Failed login action
-	AuthLoginFailed = AuthLogin.Action("Failed")
+type AuthJWTDomain struct {
+	*LogDomain
+}
 
-	// Server.Started - Server start action
-	ServerStarted = Server.Action("Started")
+type AuthOAuthDomain struct {
+	*LogDomain
+}
 
-	// Server.Stopped - Server stop action
-	ServerStopped = Server.Action("Stopped")
-
-	// Database.ConnectionFailed - Database connection failure action
-	DatabaseConnectionFailed = Database.Action("ConnectionFailed")
-)
-*/
+type AuthPasswordDomain struct {
+	*LogDomain
+}
