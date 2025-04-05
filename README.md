@@ -1,5 +1,5 @@
 # Minecharts
-Minecharts is a Go API for managing Minecraft server pods on a Kubernetes cluster using Gin and client-go. It is containerized with Docker and includes Kubernetes manifests for easy deployment.
+Minecharts API is a Go API for managing Minecraft server pods on a Kubernetes cluster using Gin and client-go. It is containerized with Docker and includes Kubernetes manifests for easy deployment.
 
 ## Features
     - Create and delete Minecraft server instances (pods)
