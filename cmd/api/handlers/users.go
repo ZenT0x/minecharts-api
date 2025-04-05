@@ -663,7 +663,7 @@ func RevokeUserPermissionsHandler(c *gin.Context) {
 	// Revoke permissions
 	oldPermissions := user.Permissions
 	for _, perm := range req.Permissions {
-		user.Permissions &= ^perm.Permission // Retire la permission avec NOT et AND
+		user.Permissions &= ^perm.Permission
 	}
 
 	// Save updated permissions
