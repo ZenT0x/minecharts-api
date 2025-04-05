@@ -112,6 +112,11 @@ func InitStructuredLogging() {
 		LogDomain: Auth.LogDomain.SubDomain("OAuth"),
 	}
 
+	// Initialize Password subdomain
+	Auth.Password = &AuthPasswordDomain{
+		LogDomain: Auth.LogDomain.SubDomain("Password"),
+	}
+
 	// Initialize API domain
 	API = &APIDomain{
 		LogDomain: Domain("API"),
