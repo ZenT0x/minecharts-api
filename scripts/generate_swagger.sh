@@ -9,6 +9,6 @@ fi
 # Run swag to generate Swagger documentation
 echo "Generating Swagger docs..."
 cd /home/zentox/Bureau/minecharts
-swag init -g cmd/main.go -o cmd/docs
+swag init -g main.go -o cmd/docs
 
 echo "Swagger documentation generated in cmd/docs/"

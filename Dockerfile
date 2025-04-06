@@ -9,9 +9,9 @@ RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY . .
 
 RUN go install github.com/swaggo/swag/cmd/swag@latest
-RUN swag init -g cmd/main.go -o cmd/docs
+RUN swag init -g main.go -o cmd/docs
 
-RUN --mount=type=cache,target=/root/.cache/go-build go build -ldflags="-s -w" -o build/minecharts-api ./cmd
+RUN --mount=type=cache,target=/root/.cache/go-build go build -ldflags="-s -w" -o build/minecharts-api .
 
 # Stage 2: Create the minimal image using scratch
 FROM alpine:latest
